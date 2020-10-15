@@ -38,6 +38,8 @@ https://docs.rs/fixed-buffer
 - [buf_redux](https://crates.io/crates/buf_redux), circular buffer support
 - [std::io::BufReader](https://doc.rust-lang.org/std/io/struct.BufReader.html)
 - [std::io::BufWriter](https://doc.rust-lang.org/std/io/struct.BufWriter.html)
+- [static-buffer](https://crates.io/crates/static-buffer), updated in 2016
+- [block-buffer](https://crates.io/crates/block-buffer), for processing fixed-length blocks of data
 
 ## TODO
 - Try to make this crate comply with the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/).
@@ -46,9 +48,13 @@ https://docs.rs/fixed-buffer
   - https://alican.codes/rust-github-actions/
 - Make the repo public
 - Find out how to include Readme.md info in the crate's docs.
+- Add some documentation tests
+  - https://doc.rust-lang.org/stable/rust-by-example/testing/doc_testing.html
 - Get a code review from an experienced rustacean
 - Publish to creates.io
 - Add feature flags: nostd, std, tokio, async-std
 - Custom buffer length.
-  See how [string-wrapper](https://crates.io/crates/string-wrapper) does it.
+  - https://crates.io/crates/generic-array
+  - https://crates.io/crates/block-buffer
+  - https://crates.io/crates/string-wrapper
 - Simplify `read_delimited()`
