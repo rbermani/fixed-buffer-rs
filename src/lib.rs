@@ -1,6 +1,5 @@
 use core::pin::Pin;
 use core::task::{Context, Poll};
-use tokio::io::ReadBuf;
 
 /// The number of bytes that can be stored in an FixedBuf.
 pub const BUFFER_LEN: usize = 4 * 1024;
@@ -39,7 +38,7 @@ impl FixedBuf {
     }
 
     /// Makes a new FixedBuf which uses the provided memory.
-    pub fn new_with_mem(buf: [u8; BUFFER_LEN]) -> FixedBuf {
+    pub fn with_mem(buf: [u8; BUFFER_LEN]) -> FixedBuf {
         FixedBuf {
             buf,
             write_index: 0,
@@ -48,7 +47,7 @@ impl FixedBuf {
     }
 
     /// Drops the struct and returns its internal memory.
-    pub fn internal_mem(self) -> [u8; BUFFER_LEN] {
+    pub fn into_inner(self) -> [u8; BUFFER_LEN] {
         self.buf
     }
 
@@ -101,28 +100,27 @@ impl FixedBuf {
         &self.buf[self.read_index..self.write_index]
     }
 
-    /// Consume readable bytes.
-    /// Call this after reading from the front of the `readable()` slice.
-    pub fn consume(&mut self, num_bytes: usize) {
+    /// Read bytes from the buffer.
+    /// Panics if the buffer does not contain enough bytes.
+    pub fn read(&mut self, num_bytes: usize) -> &[u8] {
         let new_read_index = self.read_index + num_bytes;
         if new_read_index > self.write_index {
             panic!("read would underflow");
         }
+        let old_read_index = self.read_index;
         self.read_index = new_read_index;
         if self.read_index == self.write_index {
-            self.read_all();
+            // All data has been read.  Reset the buffer.
+            self.write_index = 0;
+            self.read_index = 0;
         }
+        &self.buf[old_read_index..new_read_index]
     }
 
-    /// Consume and return all readable bytes.
+    /// Read all the bytes from the buffer.
     /// The buffer becomes empty and subsequent writes can fill the whole buffer.
     pub fn read_all(&mut self) -> &[u8] {
-        let start = self.read_index;
-        let end = self.write_index;
-        // All data has been read.  Reset the buffer.
-        self.write_index = 0;
-        self.read_index = 0;
-        &self.buf[start..end]
+        self.read(self.len())
     }
 
     /// Reads from a tokio `AsyncRead` struct into the buffer until it finds `delim`.
@@ -157,7 +155,7 @@ impl FixedBuf {
             {
                 let result_start = self.read_index;
                 let result_end = self.read_index + delim_index;
-                self.consume(delim_index + delim.len());
+                self.read(delim_index + delim.len());
                 return Ok(&self.buf[result_start..result_end]);
             }
             self.shift();
@@ -236,7 +234,7 @@ impl std::io::Read for FixedBuf {
         let src = &readable[..len];
         let dest = &mut buf[..len];
         dest.copy_from_slice(src);
-        self.consume(len);
+        self.read(len);
         Ok(len)
     }
 }
@@ -304,8 +302,8 @@ mod tests {
         let mut buf = FixedBuf::new();
         buf.append("abc");
         assert_eq!("abc", escape_ascii(buf.readable()));
-        let mem = buf.internal_mem();
-        buf = FixedBuf::new_with_mem(mem);
+        let mem = buf.into_inner();
+        buf = FixedBuf::with_mem(mem);
         assert_eq!("", escape_ascii(buf.readable()));
         buf.wrote(3);
         assert_eq!("abc", escape_ascii(buf.read_all()));
@@ -397,13 +395,13 @@ mod tests {
         assert_eq!("", escape_ascii(buf.readable()));
         buf.append("abc");
         assert_eq!("abc", escape_ascii(buf.readable()));
-        buf.consume(1);
+        buf.read(1);
         assert_eq!("bc", escape_ascii(buf.readable()));
-        buf.consume(2);
+        buf.read(2);
         assert_eq!("", escape_ascii(buf.readable()));
         buf.append("d");
         assert_eq!("d", escape_ascii(buf.readable()));
-        buf.consume(1);
+        buf.read(1);
         assert_eq!("", escape_ascii(buf.readable()));
     }
 
@@ -412,7 +410,7 @@ mod tests {
     fn test_read_too_much() {
         let mut buf = FixedBuf::new();
         buf.append("a");
-        buf.consume(2);
+        buf.read(2);
     }
 
     #[test]
@@ -542,7 +540,7 @@ mod tests {
         assert_eq!("abc", escape_ascii(buf.readable()));
         std::io::Write::write(&mut buf, b"def").unwrap();
         assert_eq!("abcdef", escape_ascii(buf.readable()));
-        buf.consume(1);
+        buf.read(1);
         std::io::Write::write(&mut buf, b"g").unwrap();
         assert_eq!("bcdefg", escape_ascii(buf.readable()));
         std::io::Write::write(&mut buf, "h".repeat(BUFFER_LEN - 8).as_bytes()).unwrap();
@@ -564,7 +562,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!("abcdef", escape_ascii(buf.readable()));
-        buf.consume(1);
+        buf.read(1);
         tokio::io::AsyncWriteExt::write_all(&mut buf, b"g")
             .await
             .unwrap();
