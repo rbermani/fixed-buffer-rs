@@ -192,6 +192,11 @@ impl FixedBuf {
         if self.read_index == 0 {
             return;
         }
+        if self.read_index == self.write_index {
+            self.write_index = 0;
+            self.read_index = 0;
+            return;
+        }
         self.buf.copy_within(self.read_index..self.write_index, 0);
         self.write_index -= self.read_index;
         self.read_index = 0;
