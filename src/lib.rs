@@ -52,6 +52,11 @@ impl FixedBuf {
         self.buf
     }
 
+    /// Returns the number of unread bytes in the buffer.
+    pub fn len(&self) -> usize {
+        self.write_index - self.read_index
+    }
+
     /// Writes `s` into the buffer, after any unread bytes.
     /// Panics if the buffer doesn't have enough free space at the end for the whole string.
     pub fn append(&mut self, s: &str) {
@@ -310,6 +315,20 @@ mod tests {
         buf.shift();
         assert_eq!("", escape_ascii(buf.readable()));
         assert_eq!("", escape_ascii(buf.read_all()));
+    }
+
+    #[test]
+    fn test_len() {
+        let mut buf = FixedBuf::new();
+        assert_eq!(0, buf.len());
+        buf.append("abc");
+        assert_eq!(3, buf.len());
+        buf.read(2);
+        assert_eq!(1, buf.len());
+        buf.shift();
+        assert_eq!(1, buf.len());
+        buf.read_all();
+        assert_eq!(0, buf.len());
     }
 
     #[test]
