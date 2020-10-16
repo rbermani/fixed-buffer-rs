@@ -1,5 +1,6 @@
 use core::pin::Pin;
 use core::task::{Context, Poll};
+use tokio::io::ReadBuf;
 
 /// The number of bytes that can be stored in an FixedBuf.
 pub const BUFFER_LEN: usize = 4 * 1024;
@@ -255,9 +256,11 @@ impl tokio::io::AsyncRead for FixedBuf {
     fn poll_read(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<Result<usize, std::io::Error>> {
-        Poll::Ready(std::io::Read::read(self.get_mut(), buf))
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<Result<(), std::io::Error>> {
+        Poll::Ready(
+            std::io::Read::read(self.get_mut(), buf.initialize_unfilled()).map(|n| buf.advance(n)),
+        )
     }
 }
 
