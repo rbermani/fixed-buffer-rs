@@ -8,7 +8,7 @@ This is a Rust library with fixed-size buffers, useful for network protocol pars
 - Lives on the stack
 - Does not allocate memory
 - Supports tokio's AsyncRead and AsyncWrite
-- Use it to read a socket, search for a delimiter, and buffer unused bytes for the next read.
+- Use it to read a stream, search for a delimiter, and save leftover bytes for the next read.
 
 ## Limitations
 - Not a circular buffer.
@@ -16,15 +16,16 @@ This is a Rust library with fixed-size buffers, useful for network protocol pars
 
 ## Example
 ```rust
-async fn handle_conn(mut tcp_stream: tokio::net::TcpStream) -> Result<(), std::io::Error> {
+async fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), Error> {
     println!("SERVER handling connection");
-    let mut buf: fixed_buffer::FixedBuf = fixed_buffer::FixedBuf::new();
+    let mut buf: FixedBuf = FixedBuf::new();
     loop {
         let line_bytes = buf.read_delimited(&mut tcp_stream, b"\n").await?;
-        let line = std::str::from_utf8(line_bytes)
-            .map_err(|_e| std::io::Error::from(std::io::ErrorKind::InvalidData))?;
-        println!("SERVER got request {:?}", line);
-        handle_request(&mut tcp_stream, line).await?;
+        match Request::parse(line_bytes) {
+            Some(Request::Hello) => handle_hello(&mut tcp_stream).await?,
+            Some(Request::Crc32(len)) => handle_crc32(&mut tcp_stream, &mut buf, len).await?,
+            _ => AsyncWriteExt::write_all(&mut tcp_stream, "ERROR\n".as_bytes()).await?,
+        };
     }
 }
 ```
