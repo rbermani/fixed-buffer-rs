@@ -256,7 +256,7 @@ impl tokio::io::AsyncRead for FixedBuf {
     fn poll_read(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
     ) -> Poll<Result<(), std::io::Error>> {
         Poll::Ready(
             std::io::Read::read(self.get_mut(), buf.initialize_unfilled()).map(|n| buf.advance(n)),
@@ -276,6 +276,17 @@ mod tests {
             }
         }
         result
+    }
+
+    pub fn to_bytes_reader(
+        s: &str,
+    ) -> tokio_util::io::StreamReader<
+        tokio::stream::Iter<std::vec::IntoIter<Result<&[u8], tokio::io::Error>>>,
+        &[u8],
+    > {
+        tokio_util::io::StreamReader::new(tokio::stream::iter(vec![tokio::io::Result::Ok(
+            s.as_bytes(),
+        )]))
     }
 
     #[test]
@@ -394,10 +405,9 @@ mod tests {
     #[tokio::test]
     async fn test_read_delimited_empty() {
         let mut buf = FixedBuf::new();
-        let mut input = tokio::io::stream_reader(tokio::stream::empty::<std::io::Result<&[u8]>>());
         assert_eq!(
             std::io::ErrorKind::NotFound,
-            buf.read_delimited(&mut input, b"b")
+            buf.read_delimited(&mut to_bytes_reader(""), b"b")
                 .await
                 .unwrap_err()
                 .kind()
@@ -407,10 +417,9 @@ mod tests {
     #[tokio::test]
     async fn test_read_delimited_not_found_eof() {
         let mut buf = FixedBuf::new();
-        let mut input = tokio::io::stream_reader(tokio::stream::iter(vec![Ok("abc".as_bytes())]));
         assert_eq!(
             std::io::ErrorKind::NotFound,
-            buf.read_delimited(&mut input, b"d")
+            buf.read_delimited(&mut to_bytes_reader("abc"), b"d")
                 .await
                 .unwrap_err()
                 .kind()
@@ -421,11 +430,9 @@ mod tests {
     #[tokio::test]
     async fn test_read_delimited_not_found_buffer_almost_full() {
         let mut buf = FixedBuf::new();
-        let many_bs = "b".repeat(BUFFER_LEN - 1);
-        let mut input = tokio::io::stream_reader(tokio::stream::iter(vec![Ok(many_bs.as_bytes())]));
         assert_eq!(
             std::io::ErrorKind::NotFound,
-            buf.read_delimited(&mut input, b"d")
+            buf.read_delimited(&mut to_bytes_reader(&"b".repeat(BUFFER_LEN - 1)), b"d")
                 .await
                 .unwrap_err()
                 .kind()
@@ -435,11 +442,9 @@ mod tests {
     #[tokio::test]
     async fn test_read_delimited_not_found_buffer_full() {
         let mut buf = FixedBuf::new();
-        let many_bs = "b".repeat(BUFFER_LEN);
-        let mut input = tokio::io::stream_reader(tokio::stream::iter(vec![Ok(many_bs.as_bytes())]));
         assert_eq!(
             std::io::ErrorKind::InvalidData,
-            buf.read_delimited(&mut input, b"d")
+            buf.read_delimited(&mut to_bytes_reader(&"b".repeat(BUFFER_LEN)), b"d")
                 .await
                 .unwrap_err()
                 .kind()
@@ -449,21 +454,26 @@ mod tests {
     #[tokio::test]
     async fn test_read_delimited_found() {
         let mut buf = FixedBuf::new();
-        let mut input = tokio::io::stream_reader(tokio::stream::iter(vec![Ok("abc".as_bytes())]));
         assert_eq!(
             "ab",
-            escape_ascii(buf.read_delimited(&mut input, b"c").await.unwrap())
+            escape_ascii(
+                buf.read_delimited(&mut to_bytes_reader("abc"), b"c")
+                    .await
+                    .unwrap()
+            )
         );
     }
 
     #[tokio::test]
     async fn test_read_delimited_found_with_leftover() {
         let mut buf = FixedBuf::new();
-        let mut input =
-            tokio::io::stream_reader(tokio::stream::iter(vec![Ok("abcdef".as_bytes())]));
         assert_eq!(
             "ab",
-            escape_ascii(buf.read_delimited(&mut input, b"c").await.unwrap())
+            escape_ascii(
+                buf.read_delimited(&mut to_bytes_reader("abcdef"), b"c")
+                    .await
+                    .unwrap()
+            )
         );
         assert_eq!("def", escape_ascii(buf.read_all()));
     }
@@ -474,8 +484,8 @@ mod tests {
         fn poll_read(
             self: Pin<&mut Self>,
             _cx: &mut Context<'_>,
-            mut _buf: &mut [u8],
-        ) -> Poll<Result<usize, std::io::Error>> {
+            _buf: &mut tokio::io::ReadBuf<'_>,
+        ) -> Poll<Result<(), std::io::Error>> {
             panic!("AsyncReadableThatPanics::poll_read called");
         }
     }
