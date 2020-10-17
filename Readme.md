@@ -53,7 +53,7 @@ https://docs.rs/fixed-buffer
   - https://doc.rust-lang.org/stable/rust-by-example/testing/doc_testing.html
 - Get a code review from an experienced rustacean
 - Publish to creates.io
-- Add feature flags: nostd, std, tokio, async-std
+- Add features: std, tokio, async-std
 - Custom buffer length.
   - https://crates.io/crates/generic-array
   - https://crates.io/crates/block-buffer

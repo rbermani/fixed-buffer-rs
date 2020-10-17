@@ -19,6 +19,7 @@ pub const BUFFER_LEN: usize = 4 * 1024;
 ///
 /// It is not a circular buffer.  You can call `shift()` periodically to
 /// move unread bytes to the front of the buffer.
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub struct FixedBuf {
     buf: [u8; BUFFER_LEN],
     write_index: usize,
@@ -272,19 +273,37 @@ impl tokio::io::AsyncRead for FixedBuf {
     }
 }
 
+impl Default for FixedBuf {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub fn escape_ascii(input: &[u8]) -> String {
+    let mut result = String::new();
+    for byte in input {
+        for ascii_byte in std::ascii::escape_default(*byte) {
+            result.push_str(std::str::from_utf8(&[ascii_byte]).unwrap());
+        }
+    }
+    result
+}
+
+impl std::fmt::Debug for FixedBuf {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "FixedBuf{{{} writable, {} readable: \"{}\"}}",
+            BUFFER_LEN - self.write_index,
+            self.len(),
+            escape_ascii(self.readable())
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    pub fn escape_ascii(input: &[u8]) -> String {
-        let mut result = String::new();
-        for byte in input {
-            for ascii_byte in std::ascii::escape_default(*byte) {
-                result.push_str(std::str::from_utf8(&[ascii_byte]).unwrap());
-            }
-        }
-        result
-    }
 
     pub fn to_bytes_reader(
         s: &str,
@@ -641,6 +660,23 @@ mod tests {
             tokio::io::AsyncReadExt::read(&mut buf, &mut data)
                 .await
                 .unwrap()
+        );
+    }
+
+    #[test]
+    fn test_default() {
+        let buf = FixedBuf::default();
+        assert_eq!("", escape_ascii(buf.readable()));
+    }
+
+    #[test]
+    fn test_debug() {
+        let mut buf = FixedBuf::default();
+        buf.append("abc");
+        buf.read(1);
+        assert_eq!(
+            "FixedBuf{4093 writable, 2 readable: \"bc\"}",
+            format!("{:?}", buf)
         );
     }
 }
