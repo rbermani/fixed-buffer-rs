@@ -305,17 +305,6 @@ impl std::fmt::Debug for FixedBuf {
 mod tests {
     use super::*;
 
-    pub fn to_bytes_reader(
-        s: &str,
-    ) -> tokio_util::io::StreamReader<
-        tokio::stream::Iter<std::vec::IntoIter<Result<&[u8], tokio::io::Error>>>,
-        &[u8],
-    > {
-        tokio_util::io::StreamReader::new(tokio::stream::iter(vec![tokio::io::Result::Ok(
-            s.as_bytes(),
-        )]))
-    }
-
     #[test]
     fn test_constructors() {
         let mut buf = FixedBuf::new();
@@ -448,7 +437,7 @@ mod tests {
         let mut buf = FixedBuf::new();
         assert_eq!(
             std::io::ErrorKind::NotFound,
-            buf.read_delimited(&mut to_bytes_reader(""), b"b")
+            buf.read_delimited(&mut std::io::Cursor::new(""), b"b")
                 .await
                 .unwrap_err()
                 .kind()
@@ -460,7 +449,7 @@ mod tests {
         let mut buf = FixedBuf::new();
         assert_eq!(
             std::io::ErrorKind::NotFound,
-            buf.read_delimited(&mut to_bytes_reader("abc"), b"d")
+            buf.read_delimited(&mut std::io::Cursor::new("abc"), b"d")
                 .await
                 .unwrap_err()
                 .kind()
@@ -473,7 +462,7 @@ mod tests {
         let mut buf = FixedBuf::new();
         assert_eq!(
             std::io::ErrorKind::NotFound,
-            buf.read_delimited(&mut to_bytes_reader(&"b".repeat(BUFFER_LEN - 1)), b"d")
+            buf.read_delimited(&mut std::io::Cursor::new(&"b".repeat(BUFFER_LEN - 1)), b"d")
                 .await
                 .unwrap_err()
                 .kind()
@@ -485,7 +474,7 @@ mod tests {
         let mut buf = FixedBuf::new();
         assert_eq!(
             std::io::ErrorKind::InvalidData,
-            buf.read_delimited(&mut to_bytes_reader(&"b".repeat(BUFFER_LEN)), b"d")
+            buf.read_delimited(&mut std::io::Cursor::new(&"b".repeat(BUFFER_LEN)), b"d")
                 .await
                 .unwrap_err()
                 .kind()
@@ -498,7 +487,7 @@ mod tests {
         assert_eq!(
             "ab",
             escape_ascii(
-                buf.read_delimited(&mut to_bytes_reader("abc"), b"c")
+                buf.read_delimited(&mut std::io::Cursor::new("abc"), b"c")
                     .await
                     .unwrap()
             )
@@ -511,7 +500,7 @@ mod tests {
         assert_eq!(
             "ab",
             escape_ascii(
-                buf.read_delimited(&mut to_bytes_reader("abcdef"), b"c")
+                buf.read_delimited(&mut std::io::Cursor::new("abcdef"), b"c")
                     .await
                     .unwrap()
             )
