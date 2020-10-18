@@ -14,22 +14,55 @@ This is a Rust library with fixed-size buffers, useful for network protocol pars
 - Not a circular buffer.
   You can call `shift()` periodically to move unread bytes to the front of the buffer.
 
-## Example
+## Examples
+Read and process records:
 ```rust
+let mut buf: FixedBuf = FixedBuf::new();
+loop {
+    // Read a chunk into the buffer.
+    let mut writable = buf.writable()
+        .ok_or(Error::new(ErrorKind::InvalidData, "record too long, buffer full"))?;
+    let bytes_written = AsyncReadExt::read(&mut input, &mut writable)?;
+    if bytes_written == 0 {
+        return Err(Error::from(ErrorKind::UnexpectedEof));
+    }
+    buf.wrote(bytes_written);
+
+    // Process records in the buffer.
+    loop {
+        let bytes_read = try_process_record(buf.readable())?;
+        if bytes_read == 0 {
+            break;
+        }
+        buf.read(bytes_read);
+    }
+    // Shift data in the buffer to free up space at the end for writing.
+    buf.shift();
+}
+```
+
+Read and handle requests from a remote client:
+```rust
+use fixed_buffer::FixedBuf;
+use std::io::Error;
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpStream;
+
 async fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), Error> {
-    println!("SERVER handling connection");
+    let (mut input, mut output) = tcp_stream.split();
     let mut buf: FixedBuf = FixedBuf::new();
     loop {
-        let line_bytes = buf.read_delimited(&mut tcp_stream, b"\n").await?;
-        match Request::parse(line_bytes) {
-            Some(Request::Hello) => handle_hello(&mut tcp_stream).await?,
-            Some(Request::Crc32(len)) => handle_crc32(&mut tcp_stream, &mut buf, len).await?,
-            _ => AsyncWriteExt::write_all(&mut tcp_stream, "ERROR\n".as_bytes()).await?,
-        };
+        // Read a line and leave leftover bytes in `buf`.
+        let line_bytes: &[u8] = buf.read_delimited(&mut input, b"\n").await?;
+        let request = Request::parse(line_bytes)?;
+        // Read any request payload from `buf` + `TcpStream`.
+        let payload_reader = tokio::io::AsyncReadExt::chain(&mut buf, &mut input);
+        handle_request(&mut output, payload_reader, request).await?;
     }
 }
 ```
-See [examples/server.rs](examples/server.rs)
+
+For a runnable example, see [examples/server.rs](examples/server.rs).
 
 ## Documentation
 https://docs.rs/fixed-buffer
@@ -43,12 +76,12 @@ https://docs.rs/fixed-buffer
 - [block-buffer](https://crates.io/crates/block-buffer), for processing fixed-length blocks of data
 
 ## TODO
-- Try to make this crate comply with the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/).
+- DONE - Try to make this crate comply with the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/).
 - Set up continuous integration tests and banner.
   - https://github.com/actions-rs/example
   - https://alican.codes/rust-github-actions/
 - Make the repo public
-- Find out how to include Readme.md info in the crate's docs.
+- DONE - Find out how to include Readme.md info in the crate's docs.
 - Add some documentation tests
   - https://doc.rust-lang.org/stable/rust-by-example/testing/doc_testing.html
 - Get a code review from an experienced rustacean
