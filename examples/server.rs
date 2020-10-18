@@ -6,17 +6,17 @@ use std::io::{Error, ErrorKind};
 use std::net::SocketAddr;
 use std::println;
 use std::task::Context;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::macros::support::{Pin, Poll};
 use tokio::net::{TcpListener, TcpStream};
 
-async fn handle_hello(tcp_stream: &mut TcpStream) -> Result<(), Error> {
-    AsyncWriteExt::write_all(tcp_stream, "HI\n".as_bytes()).await
+async fn handle_hello<W: AsyncWrite + Unpin>(mut output: W) -> Result<(), Error> {
+    AsyncWriteExt::write_all(&mut output, "HI\n".as_bytes()).await
 }
 
 struct Hasher32AsyncWriter<'a, T: Hasher32>(&'a mut T);
 
-impl<'a, T: Hasher32> tokio::io::AsyncWrite for Hasher32AsyncWriter<'a, T> {
+impl<'a, T: Hasher32> AsyncWrite for Hasher32AsyncWriter<'a, T> {
     fn poll_write(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
@@ -35,16 +35,16 @@ impl<'a, T: Hasher32> tokio::io::AsyncWrite for Hasher32AsyncWriter<'a, T> {
     }
 }
 
-async fn handle_crc32(
-    mut tcp_stream: &mut TcpStream,
-    buf: &mut FixedBuf,
+async fn handle_crc32<W: AsyncWrite + Unpin, R: AsyncRead + Unpin>(
+    mut output: W,
+    input: R,
     len: u64,
 ) -> Result<(), Error> {
     let mut digest = crc::crc32::Digest::new(crc::crc32::IEEE);
-    let mut body = buf.chain(&mut tcp_stream).take(len);
-    tokio::io::copy(&mut body, &mut Hasher32AsyncWriter(&mut digest)).await?;
+    let mut payload = input.take(len);
+    tokio::io::copy(&mut payload, &mut Hasher32AsyncWriter(&mut digest)).await?;
     let response = format!("{:x}\n", digest.sum32());
-    AsyncWriteExt::write_all(tcp_stream, response.as_bytes()).await?;
+    AsyncWriteExt::write_all(&mut output, response.as_bytes()).await?;
     Ok(())
 }
 
@@ -77,13 +77,17 @@ impl Request {
 
 async fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), Error> {
     println!("SERVER handling connection");
+    let (mut input, mut output) = tcp_stream.split();
     let mut buf: FixedBuf = FixedBuf::new();
     loop {
-        let line_bytes = buf.read_delimited(&mut tcp_stream, b"\n").await?;
+        let line_bytes = buf.read_delimited(&mut input, b"\n").await?;
         match Request::parse(line_bytes) {
-            Some(Request::Hello) => handle_hello(&mut tcp_stream).await?,
-            Some(Request::Crc32(len)) => handle_crc32(&mut tcp_stream, &mut buf, len).await?,
-            _ => AsyncWriteExt::write_all(&mut tcp_stream, "ERROR\n".as_bytes()).await?,
+            Some(Request::Hello) => handle_hello(&mut output).await?,
+            Some(Request::Crc32(len)) => {
+                let payload_reader = tokio::io::AsyncReadExt::chain(&mut buf, &mut input);
+                handle_crc32(&mut output, payload_reader, len).await?
+            }
+            _ => AsyncWriteExt::write_all(&mut output, "ERROR\n".as_bytes()).await?,
         };
     }
 }

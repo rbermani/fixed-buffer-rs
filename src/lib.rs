@@ -38,7 +38,9 @@ impl FixedBuf {
         }
     }
 
-    /// Makes a new FixedBuf which uses the provided memory.
+    /// Makes a new FixedBuf which uses the specified memory.
+    ///
+    /// This function is the inverse of `into_inner()`.
     pub fn with_mem(buf: [u8; BUFFER_LEN]) -> FixedBuf {
         FixedBuf {
             buf,
@@ -48,6 +50,8 @@ impl FixedBuf {
     }
 
     /// Drops the struct and returns its internal memory.
+    ///
+    /// This function is the inverse of `with_mem()`.
     pub fn into_inner(self) -> [u8; BUFFER_LEN] {
         self.buf
     }
@@ -69,12 +73,16 @@ impl FixedBuf {
         std::io::Write::write(self, s.as_bytes()).ok().map(|_| ())
     }
 
-    /// Returns a mutable slice of the writable part of the buffer.
+    /// Returns the writable part of the buffer.
     /// Modify bytes at the beginning of the slice
     /// and then call `wrote(usize)` to commit those bytes into the buffer.
     /// The bytes are then available for reading.
     ///
-    /// Returns None when the end of the buffer is full.  See `shift()`.
+    /// Returns an empty slice when the end of the buffer is full.  See `shift()`.
+    ///
+    /// This is a low-level method.
+    /// `std::io::Write::write()` and `tokio::io::AsyncWrite::write()
+    /// are easier ways to write to the FixedBuf.
     pub fn writable(&mut self) -> Option<&mut [u8]> {
         if self.write_index >= self.buf.len() {
             // buf ran out of space.
@@ -85,6 +93,8 @@ impl FixedBuf {
 
     /// Commit bytes into the buffer.
     /// Call this after writing to the front of the `writable()` slice.
+    ///
+    /// This is a low-level method.
     pub fn wrote(&mut self, num_bytes: usize) {
         if num_bytes == 0 {
             return;
@@ -97,6 +107,44 @@ impl FixedBuf {
     }
 
     /// Returns the slice of readable bytes in the buffer.
+    /// After processing some bytes from the front of the slice, call `read()`
+    /// to consume the bytes.
+    ///
+    /// This is a low-level method.
+    /// `read()`, `std::io::Read::read()` and `tokio::io::AsyncRead::read()
+    /// are easier ways to read from the FixedBuf.
+    ///
+    /// Example:
+    /// ```rust
+    /// # use fixed_buffer::FixedBuf;
+    /// # use std::io::{Error, ErrorKind};
+    /// # use tokio::io::AsyncReadExt;
+    /// #
+    /// # async fn f<R: tokio::io::AsyncRead + Unpin>(mut reader: R) -> Result<(), Error> {
+    /// let mut buf: FixedBuf = FixedBuf::new();
+    /// loop {
+    ///     // Read a chunk into the buffer.
+    ///     let mut writable = buf.writable()
+    ///         .ok_or(Error::new(ErrorKind::InvalidData, "record too long, buffer full"))?;
+    ///     let bytes_written = AsyncReadExt::read(&mut input, &mut writable)?;
+    ///     if bytes_written == 0 {
+    ///         return Err(Error::from(ErrorKind::UnexpectedEof));
+    ///     }
+    ///     buf.wrote(bytes_written);
+    ///
+    ///     // Process records in the buffer.
+    ///     loop {
+    ///         let bytes_read = try_process_record(buf.readable())?;
+    ///         if bytes_read == 0 {
+    ///             break;
+    ///         }
+    ///         buf.read(bytes_read);
+    ///     }
+    ///     // Shift data in the buffer to free up space at the end for writing.
+    ///     buf.shift();
+    /// }
+    /// # }
+    /// ```
     pub fn readable(&self) -> &[u8] {
         &self.buf[self.read_index..self.write_index]
     }
@@ -137,6 +185,27 @@ impl FixedBuf {
     ///
     /// Returns Err(InvalidData) if the end of the buffer fills up before `delim` is found.
     /// See `shift()`.
+    ///
+    /// Example:
+    /// ```rust
+    /// # use fixed_buffer::FixedBuf;
+    /// # use std::io::Error;
+    /// # use tokio::io::AsyncWriteExt;
+    /// # use tokio::net::TcpStream;
+    /// #
+    /// # async fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), Error> {
+    /// let (mut input, mut output) = tcp_stream.split();
+    /// let mut buf: FixedBuf = FixedBuf::new();
+    /// loop {
+    ///     // Read a line and leave leftover bytes in `buf`.
+    ///     let line_bytes: &[u8] = buf.read_delimited(&mut input, b"\n").await?;
+    ///     let request = Request::parse(line_bytes)?;
+    ///     // Read any request payload from `buf` + `TcpStream`.
+    ///     let payload_reader = tokio::io::AsyncReadExt::chain(&mut buf, &mut input);
+    ///     handle_request(&mut output, payload_reader, request).await?;
+    /// }
+    /// # }
+    /// ```
     pub async fn read_delimited<'b, T>(
         &mut self,
         mut input: T,
@@ -187,6 +256,8 @@ impl FixedBuf {
     /// After you read bytes, the space at the beginning of the buffer is unused.
     /// Call `shift()` to move unread data to the beginning of the buffer and recover the space.
     /// This makes the free space available for writes, which go at the end of the buffer.
+    ///
+    /// For an example, see `readable()`.
     pub fn shift(&mut self) {
         if self.read_index == 0 {
             return;
@@ -279,6 +350,25 @@ impl Default for FixedBuf {
     }
 }
 
+/// Convert a byte slice into a string.
+/// Includes printable ASCII characters as-is.
+/// Converts non-printable or non-ASCII characters to strings like "\n" and "\x19".
+///
+/// Uses `std::ascii::escape_default` internally to escape each byte.
+///
+/// This function is useful for printing byte slices to logs and comparing byte slices in tests.
+///
+/// Example test:
+/// ```rust
+/// #[test]
+/// # use fixed_buffer::{escape_ascii, FixedBuf};
+/// fn test_append() {
+///     let mut buf = FixedBuf::new();
+///     buf.append("ab");
+///     buf.append("cd");
+///     assert_eq!("abcd", escape_ascii(buf.readable()));
+/// }
+/// ```
 pub fn escape_ascii(input: &[u8]) -> String {
     let mut result = String::new();
     for byte in input {

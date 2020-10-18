@@ -59,3 +59,4 @@ https://docs.rs/fixed-buffer
   - https://crates.io/crates/block-buffer
   - https://crates.io/crates/string-wrapper
 - Simplify `read_delimited()`
+- Implement FixedBuf::chain(AsyncRead) which buffers reads like [tokio::io::ReadBuf](https://docs.rs/tokio/0.3.0/tokio/io/struct.ReadBuf.html).
