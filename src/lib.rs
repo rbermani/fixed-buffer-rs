@@ -7,18 +7,23 @@ pub const BUFFER_LEN: usize = 4 * 1024;
 /// FixedBuf is a byte buffer that holds a few KB.
 /// You can write bytes to it and then read them back.
 ///
-/// It supports tokio's AsyncRead and AsyncWrite.
+/// It implements tokio's [`AsyncRead`] and [`AsyncWrite`] traits.
 ///
-/// Use `read_delimited` to read a socket, searching for a delimiter,
-/// and buffer unused bytes for the next read.
-/// This works like `tokio::io::AsyncBufReadExt::read_until()`
-/// and `read_line()`, but it uses a fixed sized buffer so network peers cannot
-/// OOM the process.
+/// Use [`read_delimited`] to read lines and other delimited messages.
+/// This works like [`tokio::io::AsyncBufReadExt::read_until`],
+/// but uses a fixed sized buffer so network peers cannot OOM the process.
 ///
-/// The buffer comes from the stack.  Put it in a `Box` to put it on the heap.
+/// The buffer comes from the stack.  Put it in a [`Box`] to put it on the heap.
 ///
-/// It is not a circular buffer.  You can call `shift()` periodically to
+/// It is not a circular buffer.  You can call [`shift`] periodically to
 /// move unread bytes to the front of the buffer.
+///
+/// [`Box`]: https://doc.rust-lang.org/std/boxed/struct.Box.html
+/// [`read_delimited`]: #method.read_delimited
+/// [`shift`]: #method.shift
+/// [`AsyncRead`]: https://docs.rs/tokio/0.3.0/tokio/io/trait.AsyncRead.html
+/// [`AsyncWrite`]: https://docs.rs/tokio/0.3.0/tokio/io/trait.AsyncWrite.html
+/// [`tokio::io::AsyncBufReadExt::read_until`]: https://docs.rs/tokio/latest/tokio/io/trait.AsyncBufReadExt.html
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub struct FixedBuf {
     buf: [u8; BUFFER_LEN],
@@ -27,9 +32,11 @@ pub struct FixedBuf {
 }
 
 impl FixedBuf {
-    /// Makes a new buffer with a few KB of internal memory.
+    /// Makes a new buffer with a few 4KB of internal memory.
     ///
-    /// Allocates on the stack by default.  Put it in a `Box` to use the heap.
+    /// Allocates on the stack by default.  Put it in a [`Box`] to use the heap.
+    ///
+    /// [`Box`]: https://doc.rust-lang.org/std/boxed/struct.Box.html
     pub fn new() -> FixedBuf {
         FixedBuf {
             buf: [0; BUFFER_LEN],
@@ -40,7 +47,9 @@ impl FixedBuf {
 
     /// Makes a new FixedBuf which uses the specified memory.
     ///
-    /// This function is the inverse of `into_inner()`.
+    /// This function is the inverse of [`into_inner`].
+    ///
+    /// [`into_inner`]: #method.into_inner
     pub fn with_mem(buf: [u8; BUFFER_LEN]) -> FixedBuf {
         FixedBuf {
             buf,
@@ -51,7 +60,9 @@ impl FixedBuf {
 
     /// Drops the struct and returns its internal memory.
     ///
-    /// This function is the inverse of `with_mem()`.
+    /// This function is the inverse of [`with_mem`].
+    ///
+    /// [`with_mem`]: #method.with_mem
     pub fn into_inner(self) -> [u8; BUFFER_LEN] {
         self.buf
     }
@@ -62,27 +73,38 @@ impl FixedBuf {
     }
 
     /// Writes `s` into the buffer, after any unread bytes.
+    ///
     /// Panics if the buffer doesn't have enough free space at the end for the whole string.
     pub fn append(&mut self, s: &str) {
         std::io::Write::write(self, s.as_bytes()).unwrap();
     }
 
     /// Writes `s` into the buffer, after any unread bytes.
-    /// Returns None if the buffer doesn't have enough free space at the end for the whole string.
+    ///
+    /// Returns [`None`] if the buffer doesn't have enough free space at the end for the whole string.
+    ///
+    /// [`None`]: https://doc.rust-lang.org/std/option/enum.Option.html
     pub fn try_append(&mut self, s: &str) -> Option<()> {
         std::io::Write::write(self, s.as_bytes()).ok().map(|_| ())
     }
 
     /// Returns the writable part of the buffer.
-    /// Modify bytes at the beginning of the slice
-    /// and then call `wrote(usize)` to commit those bytes into the buffer.
-    /// The bytes are then available for reading.
     ///
-    /// Returns None when the end of the buffer is full.  See `shift()`.
+    /// To use this, first modify bytes at the beginning of the slice.
+    /// Then call [`wrote(usize)`] to commit those bytes into the buffer
+    /// and make them available for reading.
+    ///
+    /// Returns [`None`] when the end of the buffer is full.  See [`shift`].
     ///
     /// This is a low-level method.
-    /// `std::io::Write::write()` and `tokio::io::AsyncWrite::write()
-    /// are easier ways to write to the FixedBuf.
+    /// You probably want to use [`std::io::Write::write`] and [`tokio::io::AsyncWriteExt::write`]
+    /// instead.
+    ///
+    /// [`shift`]: #method.shift
+    /// [`wrote(usize)`]: #method.wrote
+    /// [`None`]: https://doc.rust-lang.org/std/option/enum.Option.html
+    /// [`std::io::Write::write`]: https://doc.rust-lang.org/std/io/trait.Write.html#tymethod.write
+    /// [`tokio::io::AsyncWriteExt::write`]: https://docs.rs/tokio/0.3.0/tokio/io/trait.AsyncWriteExt.html#method.write
     pub fn writable(&mut self) -> Option<&mut [u8]> {
         if self.write_index >= self.buf.len() {
             // buf ran out of space.
@@ -92,11 +114,14 @@ impl FixedBuf {
     }
 
     /// Commit bytes into the buffer.
-    /// Call this after writing to the front of the `writable()` slice.
+    /// Call this after writing to the front of the [`writable`] slice.
     ///
     /// This is a low-level method.
     ///
-    /// Panics if writable() is not large enough.
+    /// Panics if [`writable()`] is not large enough.
+    ///
+    /// [`writable`]: #method.writable
+    /// [`writable()`]: #method.writable
     pub fn wrote(&mut self, num_bytes: usize) {
         if num_bytes == 0 {
             return;
@@ -109,12 +134,15 @@ impl FixedBuf {
     }
 
     /// Returns the slice of readable bytes in the buffer.
-    /// After processing some bytes from the front of the slice, call `read()`
+    /// After processing some bytes from the front of the slice, call [`read`]
     /// to consume the bytes.
     ///
     /// This is a low-level method.
-    /// `read()`, `std::io::Read::read()` and `tokio::io::AsyncRead::read()`
-    /// are easier ways to read from the FixedBuf.
+    /// You probably want to use
+    /// [`read`],
+    /// [`std::io::Read::read`],
+    /// and [`tokio::io::AsyncReadExt::read`]
+    /// instead.
     ///
     /// Example:
     /// ```rust
@@ -147,11 +175,16 @@ impl FixedBuf {
     /// }
     /// # }
     /// ```
+    ///
+    /// [`read`]: #method.read
+    /// [`std::io::Read::read`]: https://doc.rust-lang.org/std/io/trait.Read.html#tymethod.read
+    /// [`tokio::io::AsyncReadExt::read`]: https://docs.rs/tokio/0.3.0/tokio/io/trait.AsyncReadExt.html#method.read
     pub fn readable(&self) -> &[u8] {
         &self.buf[self.read_index..self.write_index]
     }
 
     /// Read bytes from the buffer.
+    ///
     /// Panics if the buffer does not contain enough bytes.
     pub fn read(&mut self, num_bytes: usize) -> &[u8] {
         let new_read_index = self.read_index + num_bytes;
@@ -174,7 +207,7 @@ impl FixedBuf {
         self.read(self.len())
     }
 
-    /// Reads from a tokio `AsyncRead` struct into the buffer until it finds `delim`.
+    /// Reads from a [`tokio::io::AsyncRead`] into the buffer until it finds `delim`.
     /// Returns the slice up until `delim`.
     /// Consumes the returned bytes and `delim`.
     /// Leaves unused bytes in the buffer.
@@ -182,7 +215,7 @@ impl FixedBuf {
     /// If the buffer already contains `delim`,
     /// returns the data immediately without reading from `input`.
     ///
-    /// If the buffer does not already contain `delim`, calls `shift()` before
+    /// If the buffer does not already contain `delim`, calls [`shift`] before
     /// reading from `input`.
     ///
     /// Returns Err(InvalidData) if the buffer fills up before `delim` is found.
@@ -224,6 +257,9 @@ impl FixedBuf {
     /// }
     /// # }
     /// ```
+    ///
+    /// [`shift`]: #method.shift
+    /// [`tokio::io::AsyncRead`]: https://docs.rs/tokio/0.3.0/tokio/io/trait.AsyncRead.html
     pub async fn read_delimited<'b, T>(
         &mut self,
         mut input: T,
@@ -268,14 +304,16 @@ impl FixedBuf {
         }
     }
 
-    /// shift() recovers buffer space.
+    /// Recovers buffer space.
     ///
     /// The buffer is not circular.
     /// After you read bytes, the space at the beginning of the buffer is unused.
-    /// Call `shift()` to move unread data to the beginning of the buffer and recover the space.
+    /// Call this method to move unread data to the beginning of the buffer and recover the space.
     /// This makes the free space available for writes, which go at the end of the buffer.
     ///
-    /// For an example, see `readable()`.
+    /// For an example, see [`readable`].
+    ///
+    /// [`readable`]: #method.readable
     pub fn shift(&mut self) {
         if self.read_index == 0 {
             return;
@@ -372,7 +410,7 @@ impl Default for FixedBuf {
 /// Includes printable ASCII characters as-is.
 /// Converts non-printable or non-ASCII characters to strings like "\n" and "\x19".
 ///
-/// Uses `std::ascii::escape_default` internally to escape each byte.
+/// Uses [`std::ascii::escape_default`] internally to escape each byte.
 ///
 /// This function is useful for printing byte slices to logs and comparing byte slices in tests.
 ///
@@ -387,6 +425,8 @@ impl Default for FixedBuf {
 ///     assert_eq!("abcd", escape_ascii(buf.readable()));
 /// }
 /// ```
+///
+/// [`std::ascii::escape_default`]: https://doc.rust-lang.org/std/ascii/fn.escape_default.html
 pub fn escape_ascii(input: &[u8]) -> String {
     let mut result = String::new();
     for byte in input {
