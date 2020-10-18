@@ -77,11 +77,11 @@ https://docs.rs/fixed-buffer
 
 ## TODO
 - DONE - Try to make this crate comply with the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/).
+- DONE - Find out how to include Readme.md info in the crate's docs.
+- DONE - Make the repo public
 - Set up continuous integration tests and banner.
   - https://github.com/actions-rs/example
   - https://alican.codes/rust-github-actions/
-- Make the repo public
-- DONE - Find out how to include Readme.md info in the crate's docs.
 - Add some documentation tests
   - https://doc.rust-lang.org/stable/rust-by-example/testing/doc_testing.html
 - Get a code review from an experienced rustacean
