@@ -139,7 +139,7 @@ impl FixedBuf {
     /// See `shift()`.
     pub async fn read_delimited<'b, T>(
         &mut self,
-        input: &'b mut T,
+        mut input: T,
         delim: &[u8],
     ) -> std::io::Result<&[u8]>
     where
@@ -164,7 +164,7 @@ impl FixedBuf {
                 std::io::ErrorKind::InvalidData,
                 "end of buffer full",
             ))?;
-            let num_bytes_read = tokio::io::AsyncReadExt::read(input, writable).await?;
+            let num_bytes_read = tokio::io::AsyncReadExt::read(&mut input, writable).await?;
             if num_bytes_read == 0 {
                 if self.read_index == 0 {
                     return Err(std::io::Error::new(
