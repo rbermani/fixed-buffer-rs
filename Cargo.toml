@@ -1,15 +1,15 @@
 [package]
-publish = false
-name = "fixed-buffer"
-description = "Fixed-size buffers for network protocol parsers"
-version = "0.1.0"
 authors = ["Michael Leonhard <michael@leonhardllc.com>"]
-edition = "2018"
-repository = "https://github.com/leonhard-llc/fixed-buffer-rs"
-readme = "README.md"
-license = "Apache-2.0"
-keywords = ["io", "network", "tokio", "protocol", "async"]
 categories = ["parsing", "network-programming"]
+description = "Fixed-size buffers for network protocol parsers"
+edition = "2018"
+keywords = ["io", "network", "tokio", "protocol", "async"]
+license = "Apache-2.0"
+name = "fixed-buffer"
+publish = false
+readme = "README.md"
+repository = "https://github.com/leonhard-llc/fixed-buffer-rs"
+version = "0.1.0"
 
 [dependencies]
 tokio = { version = "0.3", features = ["io-util"] }
