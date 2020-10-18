@@ -78,7 +78,7 @@ impl FixedBuf {
     /// and then call `wrote(usize)` to commit those bytes into the buffer.
     /// The bytes are then available for reading.
     ///
-    /// Returns an empty slice when the end of the buffer is full.  See `shift()`.
+    /// Returns None when the end of the buffer is full.  See `shift()`.
     ///
     /// This is a low-level method.
     /// `std::io::Write::write()` and `tokio::io::AsyncWrite::write()
@@ -95,6 +95,8 @@ impl FixedBuf {
     /// Call this after writing to the front of the `writable()` slice.
     ///
     /// This is a low-level method.
+    ///
+    /// Panics if writable() is not large enough.
     pub fn wrote(&mut self, num_bytes: usize) {
         if num_bytes == 0 {
             return;
@@ -111,7 +113,7 @@ impl FixedBuf {
     /// to consume the bytes.
     ///
     /// This is a low-level method.
-    /// `read()`, `std::io::Read::read()` and `tokio::io::AsyncRead::read()
+    /// `read()`, `std::io::Read::read()` and `tokio::io::AsyncRead::read()`
     /// are easier ways to read from the FixedBuf.
     ///
     /// Example:
@@ -183,10 +185,26 @@ impl FixedBuf {
     /// If the buffer does not already contain `delim`, calls `shift()` before
     /// reading from `input`.
     ///
-    /// Returns Err(InvalidData) if the end of the buffer fills up before `delim` is found.
-    /// See `shift()`.
+    /// Returns Err(InvalidData) if the buffer fills up before `delim` is found.
     ///
-    /// Example:
+    /// Demo:
+    /// ```rust
+    /// # use fixed_buffer::{escape_ascii, FixedBuf};
+    /// # async fn f() {
+    /// let mut buf: FixedBuf = FixedBuf::new();
+    /// let mut input = std::io::Cursor::new(b"aaa\nbbb\n\nccc\n");
+    /// assert_eq!("aaa", escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap()));
+    /// assert_eq!("bbb", escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap()));
+    /// assert_eq!("",    escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap()));
+    /// assert_eq!("ccc", escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap()));
+    /// assert_eq!(
+    ///     std::io::ErrorKind::NotFound,
+    ///     buf.read_delimited(&mut input, b"\n").await.unwrap_err().kind()
+    /// );
+    /// # }
+    /// ```
+    ///
+    /// Example usage:
     /// ```rust
     /// # use fixed_buffer::FixedBuf;
     /// # use std::io::Error;
@@ -520,6 +538,36 @@ mod tests {
         buf.append("def");
         assert_eq!("def", escape_ascii(buf.read_all()));
         assert_eq!("", escape_ascii(buf.read_all()));
+    }
+
+    #[tokio::test]
+    async fn test_read_delimited_example() {
+        let mut buf: FixedBuf = FixedBuf::new();
+        assert_eq!("", escape_ascii(buf.readable()));
+        let mut input = std::io::Cursor::new(b"aaa\nbbb\n\nccc\n");
+        assert_eq!(
+            "aaa",
+            escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap())
+        );
+        assert_eq!(
+            "bbb",
+            escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap())
+        );
+        assert_eq!(
+            "",
+            escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap())
+        );
+        assert_eq!(
+            "ccc",
+            escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap())
+        );
+        assert_eq!(
+            std::io::ErrorKind::NotFound,
+            buf.read_delimited(&mut input, b"\n")
+                .await
+                .unwrap_err()
+                .kind()
+        );
     }
 
     #[tokio::test]
