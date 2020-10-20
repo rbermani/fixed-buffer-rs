@@ -149,14 +149,14 @@ impl FixedBuf {
     /// # use fixed_buffer::FixedBuf;
     /// # use std::io::{Error, ErrorKind};
     /// # use tokio::io::AsyncReadExt;
-    /// #
-    /// # async fn f<R: tokio::io::AsyncRead + Unpin>(mut reader: R) -> Result<(), Error> {
+    /// # fn try_process_record(b: &[u8]) -> Result<usize, Error> { Ok(0) }
+    /// # async fn f<R: tokio::io::AsyncRead + Unpin>(mut input: R) -> Result<(), Error> {
     /// let mut buf: FixedBuf = FixedBuf::new();
     /// loop {
     ///     // Read a chunk into the buffer.
     ///     let mut writable = buf.writable()
     ///         .ok_or(Error::new(ErrorKind::InvalidData, "record too long, buffer full"))?;
-    ///     let bytes_written = AsyncReadExt::read(&mut input, &mut writable)?;
+    ///     let bytes_written = AsyncReadExt::read(&mut input, &mut writable).await?;
     ///     if bytes_written == 0 {
     ///         return Err(Error::from(ErrorKind::UnexpectedEof));
     ///     }
@@ -241,9 +241,19 @@ impl FixedBuf {
     /// ```rust
     /// # use fixed_buffer::FixedBuf;
     /// # use std::io::Error;
-    /// # use tokio::io::AsyncWriteExt;
+    /// # use tokio::io::{AsyncWriteExt, AsyncWrite, AsyncRead};
     /// # use tokio::net::TcpStream;
     /// #
+    /// # struct Request(());
+    /// # impl Request {
+    /// #     pub fn parse(b: &[u8]) -> Result<Request, Error> {
+    /// #         Ok(Request(()))
+    /// #     }
+    /// # }
+    /// # async fn handle_request<W: AsyncWrite, R: AsyncRead>(output: W, reader: R, req: Request)
+    /// #     -> Result<(), Error> {
+    /// #     Ok(())
+    /// # }
     /// # async fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), Error> {
     /// let (mut input, mut output) = tcp_stream.split();
     /// let mut buf: FixedBuf = FixedBuf::new();
@@ -417,8 +427,8 @@ impl Default for FixedBuf {
 /// Example test:
 /// ```rust
 /// #[test]
-/// # use fixed_buffer::{escape_ascii, FixedBuf};
 /// fn test_append() {
+/// #   use fixed_buffer::{escape_ascii, FixedBuf};
 ///     let mut buf = FixedBuf::new();
 ///     buf.append("ab");
 ///     buf.append("cd");
