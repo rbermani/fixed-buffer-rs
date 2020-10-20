@@ -86,6 +86,21 @@ impl FixedBuf {
         self.write_index - self.read_index
     }
 
+    /// Returns true if there are unread bytes in the buffer.
+    /// Example:
+    /// ```
+    /// # use fixed_buffer::FixedBuf;
+    /// let mut buf = FixedBuf::new();
+    /// assert!(buf.is_empty());
+    /// buf.append("abc");
+    /// assert!(!buf.is_empty());
+    /// buf.read_all();
+    /// assert!(buf.is_empty());
+    /// ```
+    pub fn is_empty(&self) -> bool {
+        self.write_index == self.read_index
+    }
+
     /// Writes `s` into the buffer, after any unread bytes.
     ///
     /// Panics if the buffer doesn't have enough free space at the end for the whole string.
@@ -312,10 +327,9 @@ impl FixedBuf {
                 return Ok(&self.buf[result_start..result_end]);
             }
             self.shift();
-            let writable = self.writable().ok_or(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "end of buffer full",
-            ))?;
+            let writable = self.writable().ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, "end of buffer full")
+            })?;
             let num_bytes_read = tokio::io::AsyncReadExt::read(&mut input, writable).await?;
             if num_bytes_read == 0 {
                 if self.read_index == 0 {
@@ -360,10 +374,9 @@ impl FixedBuf {
 
 impl std::io::Write for FixedBuf {
     fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
-        let writable = self.writable().ok_or(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "end of buffer full",
-        ))?;
+        let writable = self.writable().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "end of buffer full")
+        })?;
         if writable.len() < data.len() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
