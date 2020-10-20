@@ -68,6 +68,20 @@ impl FixedBuf {
     }
 
     /// Returns the number of unread bytes in the buffer.
+    /// Example:
+    /// ```
+    /// # use fixed_buffer::FixedBuf;
+    /// let mut buf = FixedBuf::new();
+    /// assert_eq!(0, buf.len());
+    /// buf.append("abc");
+    /// assert_eq!(3, buf.len());
+    /// buf.read(2);
+    /// assert_eq!(1, buf.len());
+    /// buf.shift();
+    /// assert_eq!(1, buf.len());
+    /// buf.read_all();
+    /// assert_eq!(0, buf.len());
+    /// ```
     pub fn len(&self) -> usize {
         self.write_index - self.read_index
     }
