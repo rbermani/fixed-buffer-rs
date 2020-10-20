@@ -172,7 +172,12 @@ impl FixedBuf {
     ///         .ok_or(Error::new(ErrorKind::InvalidData, "record too long, buffer full"))?;
     ///     let bytes_written = AsyncReadExt::read(&mut input, &mut writable).await?;
     ///     if bytes_written == 0 {
-    ///         return Err(Error::from(ErrorKind::UnexpectedEof));
+    ///         if buf.len() == 0 {
+    ///             return Ok(())  // EOF at record boundary
+    ///         } else {
+    ///             // EOF in the middle of a record
+    ///             return Err(Error::from(ErrorKind::UnexpectedEof));
+    ///         }
     ///     }
     ///     buf.wrote(bytes_written);
     ///
