@@ -79,10 +79,11 @@ https://docs.rs/fixed-buffer
 - DONE - Try to make this crate comply with the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/).
 - DONE - Find out how to include Readme.md info in the crate's docs.
 - DONE - Make the repo public
-- Set up continuous integration tests and banner.
+- DONE - Set up continuous integration tests and banner.
   - https://github.com/actions-rs/example
   - https://alican.codes/rust-github-actions/
-- Add some documentation tests
+- DONE - Add some documentation tests
+  - https://doc.rust-lang.org/rustdoc/documentation-tests.html
   - https://doc.rust-lang.org/stable/rust-by-example/testing/doc_testing.html
 - Get a code review from an experienced rustacean
 - Publish to creates.io
@@ -92,4 +93,6 @@ https://docs.rs/fixed-buffer
   - https://crates.io/crates/block-buffer
   - https://crates.io/crates/string-wrapper
 - Simplify `read_delimited()`
+- Make a more generic read_frame that takes a frame detector function.
+  Make `read_delimited` use that.
 - Implement FixedBuf::chain(AsyncRead) which buffers reads like [tokio::io::ReadBuf](https://docs.rs/tokio/0.3.0/tokio/io/struct.ReadBuf.html).
