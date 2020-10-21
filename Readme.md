@@ -96,6 +96,7 @@ https://docs.rs/fixed-buffer
   - https://gitlab.com/mattdark/firebase-example/blob/master/.gitlab-ci.yml
   - https://medium.com/astraol/optimizing-ci-cd-pipeline-for-rust-projects-gitlab-docker-98df64ae3bc4
   - https://hub.docker.com/_/rust
+- Read through https://crate-ci.github.io/index.html
 - Get a code review from an experienced rustacean
 - Publish to creates.io
 - Add features: std, tokio, async-std

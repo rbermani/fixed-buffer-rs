@@ -1,4 +1,5 @@
 # https://doc.rust-lang.org/cargo/guide/continuous-integration.html#gitlab-ci
+# https://users.rust-lang.org/t/my-gitlab-config-docs-tests/16396/3
 # https://docs.gitlab.com/ee/ci/yaml/
 
 stages:
@@ -7,14 +8,19 @@ stages:
 variables:
   CARGO_HOME: $CI_PROJECT_DIR/cargo
 
+before_script:
+  - rustc --version && cargo --version
+
+cache:
+  when: always
+  key: $CI_JOB_NAME
+  paths:
+    - target/
+    - $CARGO_HOME
+
 rust-latest:
   stage: stage1
   image: rust:latest
-  cache:
-    when: always
-    key: latest
-    paths:
-      - $CI_PROJECT_DIR/cargo
   script:
     - cargo check --verbose
     - cargo build --verbose
@@ -27,11 +33,6 @@ rust-latest:
 rust-nightly:
   stage: stage1
   image: rustlang/rust:nightly
-  cache:
-    when: always
-    key: nightly
-    paths:
-      - $CI_PROJECT_DIR/cargo
   script:
     - cargo check --verbose
     - cargo build --verbose
