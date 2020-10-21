@@ -18,4 +18,5 @@ test_job:
     - cargo test --verbose
     - rustup component add rustfmt
     - cargo fmt --all -- --check
+    - rustup component add clippy
     - cargo clippy -- -D warnings
