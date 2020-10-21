@@ -18,7 +18,11 @@ So I just made the badge manually with https://shields.io/
 https://img.shields.io/badge/license-Apache--2.0-blue
 and added the SVG file to the project.
 --->
-![Apache 2.0 licensed](license-apache-2.0.svg)
+<!---
+Both coveralls.io and codecov.io demand access to lots of unnecessary data from my
+GitHub account.  No thanks.
+--->
+![Apache 2.0 licensed](license-apache-2.0.svg) ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/leonhard-llc/fixed-buffer-rs/Rust) [![Latest Version](https://img.shields.io/crates/v/fixed-buffer.svg)](https://crates.io/crates/fixed-buffer)
 
 This is a Rust library with fixed-size buffers, useful for network protocol parsers.
 
