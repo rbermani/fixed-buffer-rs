@@ -7,10 +7,14 @@ This is a Rust library with fixed-size buffers, useful for network protocol pars
 - Does not allocate memory
 - Supports tokio's AsyncRead and AsyncWrite
 - Use it to read a stream, search for a delimiter, and save leftover bytes for the next read.
+- Easy to learn & use.  Easy to maintain code that uses it.
+- Works with Rust `latest`, `beta`, and `nightly`
 
 ## Limitations
 - Not a circular buffer.
   You can call `shift()` periodically to move unread bytes to the front of the buffer.
+- There is no `iterate_delimited(AsyncRead)`.
+  Because of borrowing rules, such a function would need to return non-borrowed (allocated and copied) data.
 
 ## Examples
 Read and process records:
