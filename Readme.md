@@ -1,5 +1,24 @@
 # fixed-buffer
-![Apache 2.0 licensed](https://img.shields.io/github/license/leonhard-llc/fixed-buffer-rs)
+<!---
+Most GitHub projects get license badges from shields.io, which uses GitHub's API
+https://docs.github.com/en/free-pro-team@latest/rest/reference/licenses ,
+which uses the Ruby Gem `licensee`, which doesn't detect the LICENSE file as
+Apache-2.0.  The gem expects a boilerplate Apache-2.0 license file which includes
+instructions on applying the license.  It doesn't expect a license file that was
+created by actually following the instructions in the boilerplate.  I guess
+Apache-2.0 license and the gem were created when everyone put the license at the top
+of every source file.
+
+$ curl -sS -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/apache/flink/license |grep key
+    "key": "apache-2.0",
+$ curl -sS -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/leonhard-llc/fixed-buffer-rs/license |grep key
+    "key": "other",
+
+So I just made the badge manually with https://shields.io/
+https://img.shields.io/badge/license-Apache--2.0-blue
+and added the SVG file to the project.
+--->
+![Apache 2.0 licensed](license-apache-2.0.svg)
 
 This is a Rust library with fixed-size buffers, useful for network protocol parsers.
 
