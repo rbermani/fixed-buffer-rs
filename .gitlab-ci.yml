@@ -1,6 +1,11 @@
 stages:
   - test_stage
 
+cache:
+  when: always
+  paths:
+    - $CI_PROJECT_DIR/cargo
+
 variables:
   CARGO_HOME: $CI_PROJECT_DIR/cargo
 
