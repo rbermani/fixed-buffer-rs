@@ -1,28 +1,12 @@
 # fixed-buffer
 <!---
-Most GitHub projects get license badges from shields.io, which uses GitHub's API
-https://docs.github.com/en/free-pro-team@latest/rest/reference/licenses ,
-which uses the Ruby Gem `licensee`, which doesn't detect the LICENSE file as
-Apache-2.0.  The gem expects a boilerplate Apache-2.0 license file which includes
-instructions on applying the license.  It doesn't expect a license file that was
-created by actually following the instructions in the boilerplate.  I guess
-Apache-2.0 license and the gem were created when everyone put the license at the top
-of every source file.
-
-$ curl -sS -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/apache/flink/license |grep key
-    "key": "apache-2.0",
-$ curl -sS -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/leonhard-llc/fixed-buffer-rs/license |grep key
-    "key": "other",
-
-So I just made the badge manually with https://shields.io/
+license-apache-2.0.svg made with https://shields.io/
 https://img.shields.io/badge/license-Apache--2.0-blue
-and added the SVG file to the project.
---->
-<!---
+
 Both coveralls.io and codecov.io demand access to lots of unnecessary data from my
 GitHub account.  No thanks.
 --->
-![Apache 2.0 licensed](license-apache-2.0.svg) ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/leonhard-llc/fixed-buffer-rs/Rust) [![Latest Version](https://img.shields.io/crates/v/fixed-buffer.svg)](https://crates.io/crates/fixed-buffer)
+![Apache 2.0 licensed](license-apache-2.0.svg) [![Latest Version](https://img.shields.io/crates/v/fixed-buffer.svg)](https://crates.io/crates/fixed-buffer)
 
 This is a Rust library with fixed-size buffers, useful for network protocol parsers.
 
@@ -108,6 +92,10 @@ https://docs.rs/fixed-buffer
 - DONE - Add some documentation tests
   - https://doc.rust-lang.org/rustdoc/documentation-tests.html
   - https://doc.rust-lang.org/stable/rust-by-example/testing/doc_testing.html
+- Switch to Gitlab because GitHub code reviews suck [[1](https://github.com/isaacs/github/issues/284), [2](https://github.community/t/review-comments-not-shown-in-files-changed-if-a-commit-affects-the-comments-associated-line/1867)]
+  - https://gitlab.com/mattdark/firebase-example/blob/master/.gitlab-ci.yml
+  - https://medium.com/astraol/optimizing-ci-cd-pipeline-for-rust-projects-gitlab-docker-98df64ae3bc4
+  - https://hub.docker.com/_/rust
 - Get a code review from an experienced rustacean
 - Publish to creates.io
 - Add features: std, tokio, async-std

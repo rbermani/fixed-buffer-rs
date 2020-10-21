@@ -1,0 +1,15 @@
+stages:
+  - test_stage
+
+variables:
+  CARGO_HOME: $CI_PROJECT_DIR/cargo
+
+test_job:
+  stage: test_stage
+  image: rustlang/rust:latest
+  script:
+    - cargo check --verbose
+    - cargo build --verbose
+    - cargo test --verbose
+    - cargo fmt --all -- --check
+    - cargo clippy -- -D warnings
