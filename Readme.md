@@ -92,7 +92,7 @@ https://docs.rs/fixed-buffer
 - DONE - Add some documentation tests
   - https://doc.rust-lang.org/rustdoc/documentation-tests.html
   - https://doc.rust-lang.org/stable/rust-by-example/testing/doc_testing.html
-- Switch to Gitlab because GitHub code reviews suck [[1](https://github.com/isaacs/github/issues/284), [2](https://github.community/t/review-comments-not-shown-in-files-changed-if-a-commit-affects-the-comments-associated-line/1867)]
+- DONE - Switch to Gitlab because GitHub code reviews suck [[1](https://github.com/isaacs/github/issues/284), [2](https://github.community/t/review-comments-not-shown-in-files-changed-if-a-commit-affects-the-comments-associated-line/1867)]
   - https://gitlab.com/mattdark/firebase-example/blob/master/.gitlab-ci.yml
   - https://medium.com/astraol/optimizing-ci-cd-pipeline-for-rust-projects-gitlab-docker-98df64ae3bc4
   - https://hub.docker.com/_/rust
