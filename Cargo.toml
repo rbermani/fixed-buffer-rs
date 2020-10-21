@@ -17,3 +17,4 @@ tokio = { version = "0.3", features = ["io-util"] }
 [dev-dependencies]
 crc = "1.8"
 tokio = { version = "0.3", features = ["macros", "net", "rt-multi-thread", "time"] }
+tokio-test = "0.3"

@@ -257,7 +257,7 @@ impl FixedBuf {
     /// Demo:
     /// ```rust
     /// # use fixed_buffer::{escape_ascii, FixedBuf};
-    /// # async fn f() {
+    /// # tokio_test::block_on(async {
     /// let mut buf: FixedBuf = FixedBuf::new();
     /// let mut input = std::io::Cursor::new(b"aaa\nbbb\n\nccc\n");
     /// assert_eq!("aaa", escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap()));
@@ -268,7 +268,7 @@ impl FixedBuf {
     ///     std::io::ErrorKind::NotFound,
     ///     buf.read_delimited(&mut input, b"\n").await.unwrap_err().kind()
     /// );
-    /// # }
+    /// # })
     /// ```
     ///
     /// Example usage:
