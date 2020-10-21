@@ -1,17 +1,20 @@
-stages:
-  - test_stage
+# https://doc.rust-lang.org/cargo/guide/continuous-integration.html#gitlab-ci
+# https://docs.gitlab.com/ee/ci/yaml/
 
-cache:
-  when: always
-  paths:
-    - $CI_PROJECT_DIR/cargo
+stages:
+  - stage1
 
 variables:
   CARGO_HOME: $CI_PROJECT_DIR/cargo
 
-test_job:
-  stage: test_stage
+rust-latest:
+  stage: stage1
   image: rust:latest
+  cache:
+    when: always
+    key: latest
+    paths:
+      - $CI_PROJECT_DIR/cargo
   script:
     - cargo check --verbose
     - cargo build --verbose
@@ -20,3 +23,21 @@ test_job:
     - cargo fmt --all -- --check
     - rustup component add clippy
     - cargo clippy -- -D warnings
+
+rust-nightly:
+  stage: stage1
+  image: rustlang/rust:nightly
+  cache:
+    when: always
+    key: nightly
+    paths:
+      - $CI_PROJECT_DIR/cargo
+  script:
+    - cargo check --verbose
+    - cargo build --verbose
+    - cargo test --verbose
+    - rustup component add rustfmt
+    - cargo fmt --all -- --check
+    - rustup component add clippy
+    - cargo clippy -- -D warnings
+  allow_failure: true
