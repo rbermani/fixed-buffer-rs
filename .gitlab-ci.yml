@@ -16,5 +16,6 @@ test_job:
     - cargo check --verbose
     - cargo build --verbose
     - cargo test --verbose
+    - rustup component add rustfmt
     - cargo fmt --all -- --check
     - cargo clippy -- -D warnings
