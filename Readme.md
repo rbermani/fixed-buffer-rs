@@ -17,32 +17,6 @@ This is a Rust library with fixed-size buffers, useful for network protocol pars
   Because of borrowing rules, such a function would need to return non-borrowed (allocated and copied) data.
 
 ## Examples
-Read and process records:
-```rust
-let mut buf: FixedBuf = FixedBuf::new();
-loop {
-    // Read a chunk into the buffer.
-    let mut writable = buf.writable()
-        .ok_or(Error::new(ErrorKind::InvalidData, "record too long, buffer full"))?;
-    let bytes_written = AsyncReadExt::read(&mut input, &mut writable)?;
-    if bytes_written == 0 {
-        return Err(Error::from(ErrorKind::UnexpectedEof));
-    }
-    buf.wrote(bytes_written);
-
-    // Process records in the buffer.
-    loop {
-        let bytes_read = try_process_record(buf.readable())?;
-        if bytes_read == 0 {
-            break;
-        }
-        buf.read(bytes_read);
-    }
-    // Shift data in the buffer to free up space at the end for writing.
-    buf.shift();
-}
-```
-
 Read and handle requests from a remote client:
 ```rust
 use fixed_buffer::FixedBuf;
@@ -52,7 +26,7 @@ use tokio::net::TcpStream;
 
 async fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), Error> {
     let (mut input, mut output) = tcp_stream.split();
-    let mut buf: FixedBuf = FixedBuf::new();
+    let mut buf: FixedBuf<[u8; 4096]> = FixedBuf::new();
     loop {
         // Read a line and leave leftover bytes in `buf`.
         let line_bytes: &[u8] = buf.read_delimited(&mut input, b"\n").await?;
@@ -63,8 +37,53 @@ async fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), Error> {
     }
 }
 ```
-
 For a runnable example, see [examples/server.rs](examples/server.rs).
+
+Read and process records:
+```rust
+fn try_process_record(b: &[u8]) -> Result<usize, Error> {
+    if b.len() < 2 {
+        return Ok(0)
+    }
+    if b.starts_with("ab".as_bytes()) {
+        println!("found record");
+        Ok(2)
+    } else {
+        Err(Error::new(ErrorKind::InvalidData, "bad record"))
+    }
+}
+
+async fn read_and_process<R: tokio::io::AsyncRead + Unpin>(mut input: R)
+    -> Result<(), Error> {
+    let mut buf: FixedBuf<[u8; 1024]> = FixedBuf::new();
+    loop {
+        // Read a chunk into the buffer.
+        let mut writable = buf.writable()
+            .ok_or(Error::new(ErrorKind::InvalidData, "record too long, buffer full"))?;
+        let bytes_written = AsyncReadExt::read(&mut input, &mut writable).await?;
+        if bytes_written == 0 {
+            return if buf.len() == 0 {
+                Ok(())  // EOF at record boundary
+            } else {
+                // EOF in the middle of a record
+                Err(Error::from(ErrorKind::UnexpectedEof))
+            };
+        }
+        buf.wrote(bytes_written);
+
+        // Process records in the buffer.
+        loop {
+            let bytes_read = try_process_record(buf.readable())?;
+            if bytes_read == 0 {
+                break;
+            }
+            buf.read_bytes(bytes_read);
+        }
+        // Shift data in the buffer to free up space at the end for writing.
+        buf.shift();
+    }
+}
+```
 
 ## Documentation
 https://docs.rs/fixed-buffer
