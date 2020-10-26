@@ -78,7 +78,7 @@ impl Request {
 async fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), Error> {
     println!("SERVER handling connection");
     let (mut input, mut output) = tcp_stream.split();
-    let mut buf: FixedBuf = FixedBuf::new();
+    let mut buf: FixedBuf<[u8; 4096]> = FixedBuf::new();
     loop {
         let line_bytes = buf.read_delimited(&mut input, b"\n").await?;
         match Request::parse(line_bytes) {

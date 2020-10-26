@@ -91,15 +91,19 @@ https://docs.rs/fixed-buffer
   - https://gitlab.com/mattdark/firebase-example/blob/master/.gitlab-ci.yml
   - https://medium.com/astraol/optimizing-ci-cd-pipeline-for-rust-projects-gitlab-docker-98df64ae3bc4
   - https://hub.docker.com/_/rust
+- DONE - Custom buffer length.
+  - https://crates.io/crates/generic-array
+  - https://crates.io/crates/block-buffer
+  - https://crates.io/crates/string-wrapper
 - Read through https://crate-ci.github.io/index.html
 - Get a code review from an experienced rustacean
 - Publish to creates.io
 - Add features: std, tokio, async-std
-- Custom buffer length.
-  - https://crates.io/crates/generic-array
-  - https://crates.io/crates/block-buffer
-  - https://crates.io/crates/string-wrapper
 - Simplify `read_delimited()`
 - Make a more generic read_frame that takes a frame detector function.
   Make `read_delimited` use that.
 - Implement FixedBuf::chain(AsyncRead) which buffers reads like [tokio::io::ReadBuf](https://docs.rs/tokio/0.3.0/tokio/io/struct.ReadBuf.html).
+- Fix FixedBuf rustdoc link to box_benchmark.
+- Switch to const generics once they are stable:
+  - https://github.com/rust-lang/rust/issues/44580
+  - https://stackoverflow.com/a/56543462
