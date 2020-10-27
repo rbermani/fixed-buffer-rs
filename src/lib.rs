@@ -122,7 +122,6 @@ generate_owned_mem_block_impls! {
 /// Use [`new_with_slice`] to create a `FixedBuf<&mut [u8]>` that uses a borrowed slice of any size.
 ///
 /// [`Box`]: https://doc.rust-lang.org/std/boxed/struct.Box.html
-/// [`examples/box_benchmark.rs`]: examples/box_benchmark.rs
 /// [`new`]: #method.new
 /// [`new_with_slice`]: #method.new_with_slice
 /// [`read_delimited`]: #method.read_delimited
@@ -173,8 +172,8 @@ impl<T: OwnedMemBlock> FixedBuf<T> {
     /// `Box<FixedBuf<[u8; N]>>`.  Explanation:
     ///
     /// Standard heaps allocate memory in blocks.  The block sizes are powers of two and
-    /// some intervening sizes.  For example, jemalloc's
-    /// [block sizes](http://jemalloc.net/jemalloc.3.html#size_classes) are
+    /// some intervening sizes.  For example,
+    /// [jemalloc's block sizes](http://jemalloc.net/jemalloc.3.html#size_classes) are
     /// 8, 16, 32, 48, 64, 80, 96, 112, 128, 160, 192, 224, 256 bytes, and so on.
     /// Thus jemalloc uses 160 bytes to store a 129 byte value.
     ///
@@ -192,6 +191,7 @@ impl<T: OwnedMemBlock> FixedBuf<T> {
     ///
     /// Run the program [`examples/box_benchmark.rs`] to see the memory usage
     /// difference.
+    ///
     /// [`examples/box_benchmark.rs`]: examples/box_benchmark.rs
     /// [`new_with_slice`]: #method.new_with_slice
     pub fn new() -> Self {

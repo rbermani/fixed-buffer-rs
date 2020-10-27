@@ -115,7 +115,7 @@ https://docs.rs/fixed-buffer
   - https://crates.io/crates/block-buffer
   - https://crates.io/crates/string-wrapper
 - DONE - Publish to creates.io
-- Read through https://crate-ci.github.io/index.html
+- DONE - Read through https://crate-ci.github.io/index.html
 - Get a code review from an experienced rustacean
 - Add features: std, tokio, async-std
 - Simplify `read_delimited()`
@@ -134,6 +134,8 @@ https://docs.rs/fixed-buffer
   - Linux ARM 64-bit (Raspberry Pi 3 and newer)
   - Linux ARM 32-bit (Raspberry Pi 2)
   - RISCV & ESP32 firmware?
+- Add and update a changelog
+  - https://crate-ci.github.io/release/changelog.html
 
 ## Release Process
 1. Edit `Cargo.toml` and bump version number.
