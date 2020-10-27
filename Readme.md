@@ -106,7 +106,7 @@ https://docs.rs/fixed-buffer
 - DONE - Add some documentation tests
   - https://doc.rust-lang.org/rustdoc/documentation-tests.html
   - https://doc.rust-lang.org/stable/rust-by-example/testing/doc_testing.html
-- DONE - Switch to Gitlab because GitHub code reviews suck [[1](https://github.com/isaacs/github/issues/284), [2](https://github.community/t/review-comments-not-shown-in-files-changed-if-a-commit-affects-the-comments-associated-line/1867)]
+- DONE - Set up public repository on Gitlab.com
   - https://gitlab.com/mattdark/firebase-example/blob/master/.gitlab-ci.yml
   - https://medium.com/astraol/optimizing-ci-cd-pipeline-for-rust-projects-gitlab-docker-98df64ae3bc4
   - https://hub.docker.com/_/rust
@@ -126,3 +126,12 @@ https://docs.rs/fixed-buffer
 - Switch to const generics once they are stable:
   - https://github.com/rust-lang/rust/issues/44580
   - https://stackoverflow.com/a/56543462
+
+## Release Process
+1. Edit `Cargo.toml` and bump version number.
+1. `git add Cargo.toml`
+1. `git commit -m 'Release vNNN'`
+1. `git tag -m "vNNN" vNNN`
+1. `git push --follow-tags`
+1. `cargo publish --dry-run`
+1. `cargo publish`
