@@ -6,7 +6,6 @@ edition = "2018"
 keywords = ["io", "network", "tokio", "protocol", "async"]
 license = "Apache-2.0"
 name = "fixed-buffer"
-publish = false
 readme = "README.md"
 repository = "https://github.com/leonhard-llc/fixed-buffer-rs"
 version = "0.1.0"

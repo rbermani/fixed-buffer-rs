@@ -114,9 +114,9 @@ https://docs.rs/fixed-buffer
   - https://crates.io/crates/generic-array
   - https://crates.io/crates/block-buffer
   - https://crates.io/crates/string-wrapper
+- DONE - Publish to creates.io
 - Read through https://crate-ci.github.io/index.html
 - Get a code review from an experienced rustacean
-- Publish to creates.io
 - Add features: std, tokio, async-std
 - Simplify `read_delimited()`
 - Make a more generic read_frame that takes a frame detector function.
