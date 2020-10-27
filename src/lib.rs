@@ -1,3 +1,5 @@
+/// Fixed-size buffers, useful for network protocol parsers.
+
 use core::pin::Pin;
 use core::task::{Context, Poll};
 
