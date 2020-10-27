@@ -10,15 +10,12 @@ use core::task::{Context, Poll};
 /// This function is useful for printing byte slices to logs and comparing byte slices in tests.
 ///
 /// Example test:
-/// ```rust
-/// #[test]
-/// fn test_append() {
-/// #   use fixed_buffer::{escape_ascii, FixedBuf};
-///     let mut buf: FixedBuf<[u8; 16]> = FixedBuf::new();
-///     buf.write_str("ab");
-///     buf.write_str("cd");
-///     assert_eq!("abcd", escape_ascii(buf.readable()));
-/// }
+/// ```
+/// use fixed_buffer::{escape_ascii, FixedBuf};
+/// let mut buf: FixedBuf<[u8; 16]> = FixedBuf::new();
+/// buf.write_str("ab");
+/// buf.write_str("cd");
+/// assert_eq!("abcd", escape_ascii(buf.readable()));
 /// ```
 ///
 /// [`std::ascii::escape_default`]: https://doc.rust-lang.org/std/ascii/fn.escape_default.html
