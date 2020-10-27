@@ -126,6 +126,14 @@ https://docs.rs/fixed-buffer
 - Switch to const generics once they are stable:
   - https://github.com/rust-lang/rust/issues/44580
   - https://stackoverflow.com/a/56543462
+- Set up CI on:
+  - DONE - Linux x86 64-bit
+  - [macOS](https://gitlab.com/gitlab-org/gitlab/-/issues/269756)
+  - [Windows](https://about.gitlab.com/blog/2020/01/21/windows-shared-runner-beta/)
+  - https://crate-ci.github.io/pr/testing.html#travisci
+  - Linux ARM 64-bit (Raspberry Pi 3 and newer)
+  - Linux ARM 32-bit (Raspberry Pi 2)
+  - RISCV & ESP32 firmware?
 
 ## Release Process
 1. Edit `Cargo.toml` and bump version number.

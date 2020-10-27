@@ -72,7 +72,7 @@ generate_mem_block_impls! {
     64 * 1024, 128 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024,
 }
 
-// A trait for creating memory blocks that are owned by a buffer.
+/// A trait for creating memory blocks that are part of a FixedBuf.
 pub trait OwnedMemBlock: MemBlock {
     fn new() -> Self;
 }
