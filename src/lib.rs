@@ -755,7 +755,7 @@ mod tests {
         let _: FixedBuf<Box<[u8; 128 * 1024]>> = FixedBuf::new();
         let _: FixedBuf<Box<[u8; 256 * 1024]>> = FixedBuf::new();
         let _: FixedBuf<Box<[u8; 512 * 1024]>> = FixedBuf::new();
-        // let _: FixedBuf<Box<[u8; 1024 * 1024]>> = FixedBuf::new(); // overflows stack
+        let _: FixedBuf<Box<[u8; 1024 * 1024]>> = FixedBuf::new();
     }
 
     #[test]
