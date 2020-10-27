@@ -1,5 +1,4 @@
 /// Example server that uses `fixed_buffer` crate to parse a simple line-based protocol.
-
 use crc::Hasher32;
 use fixed_buffer::FixedBuf;
 use std::io::{Error, ErrorKind};
@@ -78,7 +77,7 @@ impl Request {
 async fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), Error> {
     println!("SERVER handling connection");
     let (mut input, mut output) = tcp_stream.split();
-    let mut buf: FixedBuf<[u8; 4096]> = FixedBuf::new();
+    let mut buf: FixedBuf<[u8; 4096]> = FixedBuf::new_with_mem([0; 4096]);
     loop {
         let line_bytes = buf.read_delimited(&mut input, b"\n").await?;
         match Request::parse(line_bytes) {

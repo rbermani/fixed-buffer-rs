@@ -1,5 +1,4 @@
 /// Fixed-size buffers, useful for network protocol parsers.
-
 use core::pin::Pin;
 use core::task::{Context, Poll};
 
@@ -29,76 +28,6 @@ pub fn escape_ascii(input: &[u8]) -> String {
         }
     }
     result
-}
-
-/// A trait providing access to the buffer's memory block.
-pub trait MemBlock {
-    fn u8slice(&self) -> &[u8];
-    fn mut_u8slice(&mut self) -> &mut [u8];
-}
-impl MemBlock for &mut [u8] {
-    fn u8slice(&self) -> &[u8] {
-        &self[..]
-    }
-
-    fn mut_u8slice(&mut self) -> &mut [u8] {
-        &mut self[..]
-    }
-}
-macro_rules! generate_mem_block_impls {
-    ( $( $LEN:expr , )+ ) => {
-        $(
-            impl MemBlock for [u8; $LEN] {
-                fn u8slice(&self) -> &[u8] {
-                    &self[..]
-                }
-                fn mut_u8slice(&mut self) -> &mut [u8] {
-                    &mut self[..]
-                }
-            }
-
-            impl MemBlock for Box<[u8; $LEN]> {
-                fn u8slice(&self) -> &[u8] {
-                    &self.as_ref()[..]
-                }
-                fn mut_u8slice(&mut self) -> &mut [u8] {
-                    &mut self.as_mut()[..]
-                }
-            }
-        )+
-    }
-}
-generate_mem_block_impls! {
-    8, 16, 32, 64, 100, 128, 200, 256, 512,
-    1024, 2 * 1024, 4 * 1024, 8 * 1024, 16 * 1024, 32 * 1024,
-    64 * 1024, 128 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024,
-}
-
-/// A trait for creating memory blocks that are part of a FixedBuf.
-pub trait OwnedMemBlock: MemBlock {
-    fn new() -> Self;
-}
-macro_rules! generate_owned_mem_block_impls {
-    ( $( $LEN:expr , )+ ) => {
-        $(
-            impl OwnedMemBlock for [u8; $LEN] {
-                fn new() -> Self {
-                    [0u8; $LEN]
-                }
-            }
-
-            impl OwnedMemBlock for Box<[u8; $LEN]> {
-                fn new() -> Self {
-                    Box::new([0u8; $LEN])
-                }
-            }
-        )+
-    }
-}
-generate_owned_mem_block_impls! {
-    8, 16, 32, 64, 100, 128, 200, 256, 512,
-    1024, 2 * 1024, 4 * 1024, 8 * 1024, 16 * 1024, 32 * 1024,
-    64 * 1024, 128 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024,
 }
 
 /// FixedBuf is a fixed-length byte buffer.
@@ -131,31 +60,14 @@ generate_owned_mem_block_impls! {
 /// [`AsyncRead`]: https://docs.rs/tokio/0.3.0/tokio/io/trait.AsyncRead.html
 /// [`AsyncWrite`]: https://docs.rs/tokio/0.3.0/tokio/io/trait.AsyncWrite.html
 /// [`tokio::io::AsyncBufReadExt::read_until`]: https://docs.rs/tokio/latest/tokio/io/trait.AsyncBufReadExt.html
-#[derive(Clone, Eq, Hash, PartialEq)]
-pub struct FixedBuf<T: MemBlock> {
+#[derive(Default, Copy, Clone, Eq, Hash, PartialEq)]
+pub struct FixedBuf<T> {
     mem: T,
     read_index: usize,
     write_index: usize,
 }
 
-impl FixedBuf<&mut [u8]> {
-    /// Makes a new buffer with the provided slice as the internal memory.
-    pub fn new_with_slice(mem: &mut [u8]) -> FixedBuf<&mut [u8]> {
-        FixedBuf {
-            mem,
-            write_index: 0,
-            read_index: 0,
-        }
-    }
-}
-
-impl<T: OwnedMemBlock> Default for FixedBuf<T> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<T: OwnedMemBlock> FixedBuf<T> {
+impl<T: Default> FixedBuf<T> {
     /// Makes a new buffer with an internal memory array.
     ///
     /// Creates `FixedBuf<[u8; N]>` and `FixedBuf<Box<[u8; N]>>` structs
@@ -198,12 +110,14 @@ impl<T: OwnedMemBlock> FixedBuf<T> {
     /// [`new_with_slice`]: #method.new_with_slice
     pub fn new() -> Self {
         Self {
-            mem: T::new(),
+            mem: T::default(),
             write_index: 0,
             read_index: 0,
         }
     }
+}
 
+impl<T> FixedBuf<T> {
     /// Consumes the provided array and uses it in a new empty buffer.
     ///
     /// This function is the inverse of [`into_inner`].
@@ -225,9 +139,7 @@ impl<T: OwnedMemBlock> FixedBuf<T> {
     pub fn into_inner(self) -> T {
         self.mem
     }
-}
 
-impl<T: MemBlock> FixedBuf<T> {
     /// Returns the number of unread bytes in the buffer.
     ///
     /// Example:
@@ -248,20 +160,6 @@ impl<T: MemBlock> FixedBuf<T> {
         self.write_index - self.read_index
     }
 
-    /// Returns the maximum number of bytes that can be stored in the buffer.
-    ///
-    /// Example:
-    /// ```
-    /// # use fixed_buffer::FixedBuf;
-    /// let mut buf: FixedBuf<[u8; 16]> = FixedBuf::new();
-    /// assert_eq!(16, buf.capacity());
-    /// buf.write_str("abc").unwrap();
-    /// assert_eq!(16, buf.capacity());
-    /// ```
-    pub fn capacity(&self) -> usize {
-        self.mem.u8slice().len()
-    }
-
     /// Returns true if there are unread bytes in the buffer.
     ///
     /// Example:
@@ -277,7 +175,247 @@ impl<T: MemBlock> FixedBuf<T> {
     pub fn is_empty(&self) -> bool {
         self.write_index == self.read_index
     }
+}
 
+impl<T: AsRef<[u8]>> FixedBuf<T> {
+    /// Returns the maximum number of bytes that can be stored in the buffer.
+    ///
+    /// Example:
+    /// ```
+    /// # use fixed_buffer::FixedBuf;
+    /// let mut buf: FixedBuf<[u8; 16]> = FixedBuf::new();
+    /// assert_eq!(16, buf.capacity());
+    /// buf.write_str("abc").unwrap();
+    /// assert_eq!(16, buf.capacity());
+    /// ```
+    pub fn capacity(&self) -> usize {
+        self.mem.as_ref().len()
+    }
+
+    /// Returns the slice of readable bytes in the buffer.
+    /// After processing some bytes from the front of the slice, call [`read`]
+    /// to consume the bytes.
+    ///
+    /// This is a low-level method.
+    /// You probably want to use
+    /// [`read`],
+    /// [`std::io::Read::read`],
+    /// and [`tokio::io::AsyncReadExt::read`]
+    /// instead.
+    ///
+    /// Example:
+    /// ```
+    /// # use fixed_buffer::FixedBuf;
+    /// # use std::io::{Error, ErrorKind};
+    /// # use tokio::io::AsyncReadExt;
+    /// fn try_process_record(b: &[u8]) -> Result<usize, Error> {
+    ///     if b.len() < 2 {
+    ///         return Ok(0)
+    ///     }
+    ///     if b.starts_with("ab".as_bytes()) {
+    ///         println!("found record");
+    ///         Ok(2)
+    ///     } else {
+    ///         Err(Error::new(ErrorKind::InvalidData, "bad record"))
+    ///     }
+    /// }
+    ///
+    /// async fn read_and_process<R: tokio::io::AsyncRead + Unpin>(mut input: R)
+    ///     -> Result<(), Error> {
+    ///     let mut buf: FixedBuf<[u8; 1024]> = FixedBuf::new_with_mem([0; 1024]);
+    ///     loop {
+    ///         // Read a chunk into the buffer.
+    ///         let mut writable = buf.writable()
+    ///             .ok_or(Error::new(ErrorKind::InvalidData, "record too long, buffer full"))?;
+    ///         let bytes_written = AsyncReadExt::read(&mut input, &mut writable).await?;
+    ///         if bytes_written == 0 {
+    ///             return if buf.len() == 0 {
+    ///                 Ok(())  // EOF at record boundary
+    ///             } else {
+    ///                 // EOF in the middle of a record
+    ///                 Err(Error::from(ErrorKind::UnexpectedEof))
+    ///             };
+    ///         }
+    ///         buf.wrote(bytes_written);
+    ///
+    ///         // Process records in the buffer.
+    ///         loop {
+    ///             let bytes_read = try_process_record(buf.readable())?;
+    ///             if bytes_read == 0 {
+    ///                 break;
+    ///             }
+    ///             buf.read_bytes(bytes_read);
+    ///         }
+    ///         // Shift data in the buffer to free up space at the end for writing.
+    ///         buf.shift();
+    ///     }
+    /// }
+    ///
+    /// # tokio_test::block_on(async {
+    /// read_and_process(std::io::Cursor::new(b"")).await.unwrap();
+    /// read_and_process(std::io::Cursor::new(b"abab")).await.unwrap();
+    /// assert_eq!(
+    ///     std::io::ErrorKind::UnexpectedEof,
+    ///     read_and_process(std::io::Cursor::new(b"aba")).await.unwrap_err().kind()
+    /// );
+    /// # })
+    /// ```
+    ///
+    /// [`read`]: #method.read
+    /// [`std::io::Read::read`]: https://doc.rust-lang.org/std/io/trait.Read.html#tymethod.read
+    /// [`tokio::io::AsyncReadExt::read`]: https://docs.rs/tokio/0.3.0/tokio/io/trait.AsyncReadExt.html#method.read
+    pub fn readable(&self) -> &[u8] {
+        &self.mem.as_ref()[self.read_index..self.write_index]
+    }
+
+    /// Read bytes from the buffer.
+    ///
+    /// Panics if the buffer does not contain enough bytes.
+    pub fn read_bytes(&mut self, num_bytes: usize) -> &[u8] {
+        let new_read_index = self.read_index + num_bytes;
+        if new_read_index > self.write_index {
+            panic!("read would underflow");
+        }
+        let old_read_index = self.read_index;
+        self.read_index = new_read_index;
+        if self.read_index == self.write_index {
+            // All data has been read.  Reset the buffer.
+            self.write_index = 0;
+            self.read_index = 0;
+        }
+        &self.mem.as_ref()[old_read_index..new_read_index]
+    }
+
+    /// Read all the bytes from the buffer.
+    /// The buffer becomes empty and subsequent writes can fill the whole buffer.
+    pub fn read_all(&mut self) -> &[u8] {
+        self.read_bytes(self.len())
+    }
+
+    /// Reads bytes from the buffer and copies them into `dest`.
+    ///
+    /// Returns the number of bytes copied.
+    ///
+    /// Returns `Ok(0)` when the buffer is empty or `dest` is zero-length.
+    pub fn read_and_copy_bytes(&mut self, dest: &mut [u8]) -> std::io::Result<usize> {
+        let readable = self.readable();
+        let len = core::cmp::min(dest.len(), readable.len());
+        if len == 0 {
+            return Ok(0);
+        }
+        let src = &readable[..len];
+        let copy_dest = &mut dest[..len];
+        copy_dest.copy_from_slice(src);
+        self.read_bytes(len);
+        Ok(len)
+    }
+}
+
+impl<T: AsRef<[u8]> + AsMut<[u8]>> FixedBuf<T> {
+    /// Reads from a [`tokio::io::AsyncRead`] into the buffer until it finds `delim`.
+    /// Returns the slice up until `delim`.
+    /// Consumes the returned bytes and `delim`.
+    /// Leaves unused bytes in the buffer.
+    ///
+    /// If the buffer already contains `delim`,
+    /// returns the data immediately without reading from `input`.
+    ///
+    /// If the buffer does not already contain `delim`, calls [`shift`] before
+    /// reading from `input`.
+    ///
+    /// Returns `Err(Error(InvalidData,_))` if the buffer fills up before `delim` is found.
+    ///
+    /// Demo:
+    /// ```
+    /// # use fixed_buffer::{escape_ascii, FixedBuf};
+    /// # tokio_test::block_on(async {
+    /// let mut buf: FixedBuf<[u8; 32]> = FixedBuf::new();
+    /// let mut input = std::io::Cursor::new(b"aaa\nbbb\n\nccc\n");
+    /// assert_eq!("aaa", escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap()));
+    /// assert_eq!("bbb", escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap()));
+    /// assert_eq!("",    escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap()));
+    /// assert_eq!("ccc", escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap()));
+    /// assert_eq!(
+    ///     std::io::ErrorKind::NotFound,
+    ///     buf.read_delimited(&mut input, b"\n").await.unwrap_err().kind()
+    /// );
+    /// # })
+    /// ```
+    ///
+    /// Example usage:
+    /// ```
+    /// # use fixed_buffer::FixedBuf;
+    /// # use std::io::Error;
+    /// # use tokio::io::{AsyncWriteExt, AsyncWrite, AsyncRead};
+    /// # use tokio::net::TcpStream;
+    /// #
+    /// # struct Request(());
+    /// # impl Request {
+    /// #     pub fn parse(b: &[u8]) -> Result<Request, Error> {
+    /// #         Ok(Request(()))
+    /// #     }
+    /// # }
+    /// # async fn handle_request<W: AsyncWrite, R: AsyncRead>(output: W, reader: R, req: Request)
+    /// #     -> Result<(), Error> {
+    /// #     Ok(())
+    /// # }
+    /// # async fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), Error> {
+    /// let (mut input, mut output) = tcp_stream.split();
+    /// let mut buf: FixedBuf<[u8; 1024]> = FixedBuf::new_with_mem([0; 1024]);
+    /// loop {
+    ///     // Read a line and leave leftover bytes in `buf`.
+    ///     let line_bytes: &[u8] = buf.read_delimited(&mut input, b"\n").await?;
+    ///     let request = Request::parse(line_bytes)?;
+    ///     // Read any request payload from `buf` + `TcpStream`.
+    ///     let payload_reader = tokio::io::AsyncReadExt::chain(&mut buf, &mut input);
+    ///     handle_request(&mut output, payload_reader, request).await?;
+    /// }
+    /// # }
+    /// ```
+    ///
+    /// [`shift`]: #method.shift
+    /// [`tokio::io::AsyncRead`]: https://docs.rs/tokio/0.3.0/tokio/io/trait.AsyncRead.html
+    pub async fn read_delimited<R>(&mut self, mut input: R, delim: &[u8]) -> std::io::Result<&[u8]>
+    where
+        R: tokio::io::AsyncRead + std::marker::Unpin + Send,
+    {
+        loop {
+            if let Some(delim_index) = self
+                .readable()
+                .windows(delim.len())
+                .enumerate()
+                .filter(|(_index, window)| *window == delim)
+                .map(|(index, _window)| index)
+                .next()
+            {
+                let result_start = self.read_index;
+                let result_end = self.read_index + delim_index;
+                self.read_bytes(delim_index + delim.len());
+                return Ok(&self.mem.as_ref()[result_start..result_end]);
+            }
+            self.shift();
+            let writable = self.writable().ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, "end of buffer full")
+            })?;
+            let num_bytes_read = tokio::io::AsyncReadExt::read(&mut input, writable).await?;
+            if num_bytes_read == 0 {
+                if self.read_index == 0 {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "eof with no data read",
+                    ));
+                }
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "eof before delim read",
+                ));
+            }
+            self.wrote(num_bytes_read);
+        }
+    }
+}
+
+impl<T: AsMut<[u8]>> FixedBuf<T> {
     /// Writes `s` into the buffer, after any unread bytes.
     ///
     /// Returns [`Err`] if the buffer doesn't have enough free space at the end
@@ -369,11 +507,11 @@ impl<T: MemBlock> FixedBuf<T> {
     /// [`std::io::Write::write`]: https://doc.rust-lang.org/std/io/trait.Write.html#tymethod.write
     /// [`tokio::io::AsyncWriteExt::write`]: https://docs.rs/tokio/0.3.0/tokio/io/trait.AsyncWriteExt.html#method.write
     pub fn writable(&mut self) -> Option<&mut [u8]> {
-        if self.write_index >= self.mem.u8slice().len() {
+        if self.write_index >= self.mem.as_mut().len() {
             // Ran out of space.
             return None;
         }
-        Some(&mut self.mem.mut_u8slice()[self.write_index..])
+        Some(&mut self.mem.as_mut()[self.write_index..])
     }
 
     /// Commit bytes into the buffer.
@@ -392,230 +530,10 @@ impl<T: MemBlock> FixedBuf<T> {
             return;
         }
         let new_write_index = self.write_index + num_bytes;
-        if new_write_index > self.mem.u8slice().len() {
+        if new_write_index > self.mem.as_mut().len() {
             panic!("write would overflow");
         }
         self.write_index = new_write_index;
-    }
-
-    /// Returns the slice of readable bytes in the buffer.
-    /// After processing some bytes from the front of the slice, call [`read`]
-    /// to consume the bytes.
-    ///
-    /// This is a low-level method.
-    /// You probably want to use
-    /// [`read`],
-    /// [`std::io::Read::read`],
-    /// and [`tokio::io::AsyncReadExt::read`]
-    /// instead.
-    ///
-    /// Example:
-    /// ```
-    /// # use fixed_buffer::FixedBuf;
-    /// # use std::io::{Error, ErrorKind};
-    /// # use tokio::io::AsyncReadExt;
-    /// fn try_process_record(b: &[u8]) -> Result<usize, Error> {
-    ///     if b.len() < 2 {
-    ///         return Ok(0)
-    ///     }
-    ///     if b.starts_with("ab".as_bytes()) {
-    ///         println!("found record");
-    ///         Ok(2)
-    ///     } else {
-    ///         Err(Error::new(ErrorKind::InvalidData, "bad record"))
-    ///     }
-    /// }
-    ///
-    /// async fn read_and_process<R: tokio::io::AsyncRead + Unpin>(mut input: R)
-    ///     -> Result<(), Error> {
-    ///     let mut buf: FixedBuf<[u8; 1024]> = FixedBuf::new();
-    ///     loop {
-    ///         // Read a chunk into the buffer.
-    ///         let mut writable = buf.writable()
-    ///             .ok_or(Error::new(ErrorKind::InvalidData, "record too long, buffer full"))?;
-    ///         let bytes_written = AsyncReadExt::read(&mut input, &mut writable).await?;
-    ///         if bytes_written == 0 {
-    ///             return if buf.len() == 0 {
-    ///                 Ok(())  // EOF at record boundary
-    ///             } else {
-    ///                 // EOF in the middle of a record
-    ///                 Err(Error::from(ErrorKind::UnexpectedEof))
-    ///             };
-    ///         }
-    ///         buf.wrote(bytes_written);
-    ///
-    ///         // Process records in the buffer.
-    ///         loop {
-    ///             let bytes_read = try_process_record(buf.readable())?;
-    ///             if bytes_read == 0 {
-    ///                 break;
-    ///             }
-    ///             buf.read_bytes(bytes_read);
-    ///         }
-    ///         // Shift data in the buffer to free up space at the end for writing.
-    ///         buf.shift();
-    ///     }
-    /// }
-    ///
-    /// # tokio_test::block_on(async {
-    /// read_and_process(std::io::Cursor::new(b"")).await.unwrap();
-    /// read_and_process(std::io::Cursor::new(b"abab")).await.unwrap();
-    /// assert_eq!(
-    ///     std::io::ErrorKind::UnexpectedEof,
-    ///     read_and_process(std::io::Cursor::new(b"aba")).await.unwrap_err().kind()
-    /// );
-    /// # })
-    /// ```
-    ///
-    /// [`read`]: #method.read
-    /// [`std::io::Read::read`]: https://doc.rust-lang.org/std/io/trait.Read.html#tymethod.read
-    /// [`tokio::io::AsyncReadExt::read`]: https://docs.rs/tokio/0.3.0/tokio/io/trait.AsyncReadExt.html#method.read
-    pub fn readable(&self) -> &[u8] {
-        &self.mem.u8slice()[self.read_index..self.write_index]
-    }
-
-    /// Read bytes from the buffer.
-    ///
-    /// Panics if the buffer does not contain enough bytes.
-    pub fn read_bytes(&mut self, num_bytes: usize) -> &[u8] {
-        let new_read_index = self.read_index + num_bytes;
-        if new_read_index > self.write_index {
-            panic!("read would underflow");
-        }
-        let old_read_index = self.read_index;
-        self.read_index = new_read_index;
-        if self.read_index == self.write_index {
-            // All data has been read.  Reset the buffer.
-            self.write_index = 0;
-            self.read_index = 0;
-        }
-        &self.mem.u8slice()[old_read_index..new_read_index]
-    }
-
-    /// Read all the bytes from the buffer.
-    /// The buffer becomes empty and subsequent writes can fill the whole buffer.
-    pub fn read_all(&mut self) -> &[u8] {
-        self.read_bytes(self.len())
-    }
-
-    /// Reads bytes from the buffer and copies them into `dest`.
-    ///
-    /// Returns the number of bytes copied.
-    ///
-    /// Returns `Ok(0)` when the buffer is empty or `dest` is zero-length.
-    pub fn read_and_copy_bytes(&mut self, dest: &mut [u8]) -> std::io::Result<usize> {
-        let readable = self.readable();
-        let len = core::cmp::min(dest.len(), readable.len());
-        if len == 0 {
-            return Ok(0);
-        }
-        let src = &readable[..len];
-        let copy_dest = &mut dest[..len];
-        copy_dest.copy_from_slice(src);
-        self.read_bytes(len);
-        Ok(len)
-    }
-
-    /// Reads from a [`tokio::io::AsyncRead`] into the buffer until it finds `delim`.
-    /// Returns the slice up until `delim`.
-    /// Consumes the returned bytes and `delim`.
-    /// Leaves unused bytes in the buffer.
-    ///
-    /// If the buffer already contains `delim`,
-    /// returns the data immediately without reading from `input`.
-    ///
-    /// If the buffer does not already contain `delim`, calls [`shift`] before
-    /// reading from `input`.
-    ///
-    /// Returns `Err(Error(InvalidData,_))` if the buffer fills up before `delim` is found.
-    ///
-    /// Demo:
-    /// ```
-    /// # use fixed_buffer::{escape_ascii, FixedBuf};
-    /// # tokio_test::block_on(async {
-    /// let mut buf: FixedBuf<[u8; 32]> = FixedBuf::new();
-    /// let mut input = std::io::Cursor::new(b"aaa\nbbb\n\nccc\n");
-    /// assert_eq!("aaa", escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap()));
-    /// assert_eq!("bbb", escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap()));
-    /// assert_eq!("",    escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap()));
-    /// assert_eq!("ccc", escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap()));
-    /// assert_eq!(
-    ///     std::io::ErrorKind::NotFound,
-    ///     buf.read_delimited(&mut input, b"\n").await.unwrap_err().kind()
-    /// );
-    /// # })
-    /// ```
-    ///
-    /// Example usage:
-    /// ```
-    /// # use fixed_buffer::FixedBuf;
-    /// # use std::io::Error;
-    /// # use tokio::io::{AsyncWriteExt, AsyncWrite, AsyncRead};
-    /// # use tokio::net::TcpStream;
-    /// #
-    /// # struct Request(());
-    /// # impl Request {
-    /// #     pub fn parse(b: &[u8]) -> Result<Request, Error> {
-    /// #         Ok(Request(()))
-    /// #     }
-    /// # }
-    /// # async fn handle_request<W: AsyncWrite, R: AsyncRead>(output: W, reader: R, req: Request)
-    /// #     -> Result<(), Error> {
-    /// #     Ok(())
-    /// # }
-    /// # async fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), Error> {
-    /// let (mut input, mut output) = tcp_stream.split();
-    /// let mut buf: FixedBuf<[u8; 1024]> = FixedBuf::new();
-    /// loop {
-    ///     // Read a line and leave leftover bytes in `buf`.
-    ///     let line_bytes: &[u8] = buf.read_delimited(&mut input, b"\n").await?;
-    ///     let request = Request::parse(line_bytes)?;
-    ///     // Read any request payload from `buf` + `TcpStream`.
-    ///     let payload_reader = tokio::io::AsyncReadExt::chain(&mut buf, &mut input);
-    ///     handle_request(&mut output, payload_reader, request).await?;
-    /// }
-    /// # }
-    /// ```
-    ///
-    /// [`shift`]: #method.shift
-    /// [`tokio::io::AsyncRead`]: https://docs.rs/tokio/0.3.0/tokio/io/trait.AsyncRead.html
-    pub async fn read_delimited<R>(&mut self, mut input: R, delim: &[u8]) -> std::io::Result<&[u8]>
-    where
-        R: tokio::io::AsyncRead + std::marker::Unpin + Send,
-    {
-        loop {
-            if let Some(delim_index) = self
-                .readable()
-                .windows(delim.len())
-                .enumerate()
-                .filter(|(_index, window)| *window == delim)
-                .map(|(index, _window)| index)
-                .next()
-            {
-                let result_start = self.read_index;
-                let result_end = self.read_index + delim_index;
-                self.read_bytes(delim_index + delim.len());
-                return Ok(&self.mem.u8slice()[result_start..result_end]);
-            }
-            self.shift();
-            let writable = self.writable().ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidData, "end of buffer full")
-            })?;
-            let num_bytes_read = tokio::io::AsyncReadExt::read(&mut input, writable).await?;
-            if num_bytes_read == 0 {
-                if self.read_index == 0 {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::NotFound,
-                        "eof with no data read",
-                    ));
-                }
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "eof before delim read",
-                ));
-            }
-            self.wrote(num_bytes_read);
-        }
     }
 
     /// Recovers buffer space.
@@ -638,14 +556,16 @@ impl<T: MemBlock> FixedBuf<T> {
             return;
         }
         self.mem
-            .mut_u8slice()
+            .as_mut()
             .copy_within(self.read_index..self.write_index, 0);
         self.write_index -= self.read_index;
         self.read_index = 0;
     }
 }
 
-impl<T: MemBlock> std::io::Write for FixedBuf<T> {
+impl<T> Unpin for FixedBuf<T> {}
+
+impl<T: AsMut<[u8]>> std::io::Write for FixedBuf<T> {
     fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
         self.write_bytes(data)
     }
@@ -655,13 +575,13 @@ impl<T: MemBlock> std::io::Write for FixedBuf<T> {
     }
 }
 
-impl<T: MemBlock> std::io::Read for FixedBuf<T> {
+impl<T: AsRef<[u8]>> std::io::Read for FixedBuf<T> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.read_and_copy_bytes(buf)
     }
 }
 
-impl<T: MemBlock + Unpin> tokio::io::AsyncWrite for FixedBuf<T> {
+impl<T: AsMut<[u8]>> tokio::io::AsyncWrite for FixedBuf<T> {
     fn poll_write(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
@@ -682,7 +602,7 @@ impl<T: MemBlock + Unpin> tokio::io::AsyncWrite for FixedBuf<T> {
     }
 }
 
-impl<T: MemBlock + Unpin> tokio::io::AsyncRead for FixedBuf<T> {
+impl<T: AsRef<[u8]> + Unpin> tokio::io::AsyncRead for FixedBuf<T> {
     fn poll_read(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
@@ -696,7 +616,7 @@ impl<T: MemBlock + Unpin> tokio::io::AsyncRead for FixedBuf<T> {
     }
 }
 
-impl<T: MemBlock> std::fmt::Debug for FixedBuf<T> {
+impl<T: AsRef<[u8]>> std::fmt::Debug for FixedBuf<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -717,47 +637,47 @@ mod tests {
         let _: FixedBuf<[u8; 8]> = FixedBuf::new();
         let _: FixedBuf<[u8; 16]> = FixedBuf::new();
         let _: FixedBuf<[u8; 32]> = FixedBuf::new();
-        let _: FixedBuf<[u8; 64]> = FixedBuf::new();
-        let _: FixedBuf<[u8; 100]> = FixedBuf::new();
-        let _: FixedBuf<[u8; 128]> = FixedBuf::new();
-        let _: FixedBuf<[u8; 200]> = FixedBuf::new();
-        let _: FixedBuf<[u8; 256]> = FixedBuf::new();
-        let _: FixedBuf<[u8; 512]> = FixedBuf::new();
-        let _: FixedBuf<[u8; 1024]> = FixedBuf::new();
-        let _: FixedBuf<[u8; 2 * 1024]> = FixedBuf::new();
-        let _: FixedBuf<[u8; 4 * 1024]> = FixedBuf::new();
-        let _: FixedBuf<[u8; 8 * 1024]> = FixedBuf::new();
-        let _: FixedBuf<[u8; 16 * 1024]> = FixedBuf::new();
-        let _: FixedBuf<[u8; 32 * 1024]> = FixedBuf::new();
-        let _: FixedBuf<[u8; 64 * 1024]> = FixedBuf::new();
-        let _: FixedBuf<[u8; 128 * 1024]> = FixedBuf::new();
-        let _: FixedBuf<[u8; 256 * 1024]> = FixedBuf::new();
-        let _: FixedBuf<[u8; 512 * 1024]> = FixedBuf::new();
+        let _: FixedBuf<[u8; 64]> = FixedBuf::new_with_mem([0; 64]);
+        let _: FixedBuf<[u8; 100]> = FixedBuf::new_with_mem([0; 100]);
+        let _: FixedBuf<[u8; 128]> = FixedBuf::new_with_mem([0; 128]);
+        let _: FixedBuf<[u8; 200]> = FixedBuf::new_with_mem([0; 200]);
+        let _: FixedBuf<[u8; 256]> = FixedBuf::new_with_mem([0; 256]);
+        let _: FixedBuf<[u8; 512]> = FixedBuf::new_with_mem([0; 512]);
+        let _: FixedBuf<[u8; 1024]> = FixedBuf::new_with_mem([0; 1024]);
+        let _: FixedBuf<[u8; 2 * 1024]> = FixedBuf::new_with_mem([0; 2 * 1024]);
+        let _: FixedBuf<[u8; 4 * 1024]> = FixedBuf::new_with_mem([0; 4 * 1024]);
+        let _: FixedBuf<[u8; 8 * 1024]> = FixedBuf::new_with_mem([0; 8 * 1024]);
+        let _: FixedBuf<[u8; 16 * 1024]> = FixedBuf::new_with_mem([0; 16 * 1024]);
+        let _: FixedBuf<[u8; 32 * 1024]> = FixedBuf::new_with_mem([0; 32 * 1024]);
+        let _: FixedBuf<[u8; 64 * 1024]> = FixedBuf::new_with_mem([0; 64 * 1024]);
+        let _: FixedBuf<[u8; 128 * 1024]> = FixedBuf::new_with_mem([0; 128 * 1024]);
+        let _: FixedBuf<[u8; 256 * 1024]> = FixedBuf::new_with_mem([0; 256 * 1024]);
+        let _: FixedBuf<[u8; 512 * 1024]> = FixedBuf::new_with_mem([0; 512 * 1024]);
         // let _: FixedBuf<[u8; 1024 * 1024]> = FixedBuf::new(); // overflows stack
     }
 
     #[test]
     fn test_box_array_sizes() {
-        let _: FixedBuf<Box<[u8; 8]>> = FixedBuf::new();
-        let _: FixedBuf<Box<[u8; 16]>> = FixedBuf::new();
-        let _: FixedBuf<Box<[u8; 32]>> = FixedBuf::new();
-        let _: FixedBuf<Box<[u8; 64]>> = FixedBuf::new();
-        let _: FixedBuf<Box<[u8; 100]>> = FixedBuf::new();
-        let _: FixedBuf<Box<[u8; 128]>> = FixedBuf::new();
-        let _: FixedBuf<Box<[u8; 200]>> = FixedBuf::new();
-        let _: FixedBuf<Box<[u8; 256]>> = FixedBuf::new();
-        let _: FixedBuf<Box<[u8; 512]>> = FixedBuf::new();
-        let _: FixedBuf<Box<[u8; 1024]>> = FixedBuf::new();
-        let _: FixedBuf<Box<[u8; 2 * 1024]>> = FixedBuf::new();
-        let _: FixedBuf<Box<[u8; 4 * 1024]>> = FixedBuf::new();
-        let _: FixedBuf<Box<[u8; 8 * 1024]>> = FixedBuf::new();
-        let _: FixedBuf<Box<[u8; 16 * 1024]>> = FixedBuf::new();
-        let _: FixedBuf<Box<[u8; 32 * 1024]>> = FixedBuf::new();
-        let _: FixedBuf<Box<[u8; 64 * 1024]>> = FixedBuf::new();
-        let _: FixedBuf<Box<[u8; 128 * 1024]>> = FixedBuf::new();
-        let _: FixedBuf<Box<[u8; 256 * 1024]>> = FixedBuf::new();
-        let _: FixedBuf<Box<[u8; 512 * 1024]>> = FixedBuf::new();
-        let _: FixedBuf<Box<[u8; 1024 * 1024]>> = FixedBuf::new();
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 8]));
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 16]));
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 32]));
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 64]));
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 100]));
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 128]));
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 200]));
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 256]));
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 512]));
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 1024]));
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 2 * 1024]));
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 4 * 1024]));
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 8 * 1024]));
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 16 * 1024]));
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 32 * 1024]));
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 64 * 1024]));
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 128 * 1024]));
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 256 * 1024]));
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 512 * 1024]));
+        let _: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 1024 * 1024]));
     }
 
     #[test]
@@ -775,7 +695,7 @@ mod tests {
 
     #[test]
     fn test_box_array_constructors() {
-        let mut buf: FixedBuf<Box<[u8; 16]>> = FixedBuf::new();
+        let mut buf: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 16]));
         buf.write_str("abc").unwrap();
         assert_eq!("abc", escape_ascii(buf.readable()));
         let mem = buf.into_inner();
@@ -789,10 +709,10 @@ mod tests {
     #[test]
     fn test_slice_constructor() {
         let mut mem = [0u8; 15];
-        let mut buf = FixedBuf::new_with_slice(&mut mem);
+        let mut buf = FixedBuf::new_with_mem(&mut mem);
         buf.write_str("abc").unwrap();
         assert_eq!("abc", escape_ascii(buf.readable()));
-        buf = FixedBuf::new_with_slice(&mut mem);
+        buf = FixedBuf::new_with_mem(&mut mem);
         assert_eq!("", escape_ascii(buf.readable()));
         buf.wrote(3);
         assert_eq!("abc", escape_ascii(buf.read_all()));
@@ -1147,7 +1067,7 @@ mod tests {
     fn test_default() {
         let array_buf: FixedBuf<[u8; 16]> = FixedBuf::default();
         assert_eq!("", escape_ascii(array_buf.readable()));
-        let box_buf: FixedBuf<Box<[u8; 16]>> = FixedBuf::default();
+        let box_buf: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 16]));
         assert_eq!("", escape_ascii(box_buf.readable()));
         // let slice_buf: FixedBuf<&mut [u8]> = FixedBuf::default(); // compiler error
     }
@@ -1155,9 +1075,9 @@ mod tests {
     #[test]
     fn test_debug() {
         let mut array_buf: FixedBuf<[u8; 8]> = FixedBuf::default();
-        let mut box_buf: FixedBuf<Box<[u8; 16]>> = FixedBuf::new();
+        let mut box_buf: FixedBuf<Box<[u8]>> = FixedBuf::new_with_mem(Box::new([0; 16]));
         let mut mem = [0u8; 15];
-        let mut slice_buf = FixedBuf::new_with_slice(&mut mem);
+        let mut slice_buf = FixedBuf::new_with_mem(&mut mem);
         array_buf.write_str("abc").unwrap();
         box_buf.write_str("abc").unwrap();
         slice_buf.write_str("abc").unwrap();
