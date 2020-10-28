@@ -22,23 +22,11 @@ rust-latest:
   stage: stage1
   image: rust:latest
   script:
-    - cargo check --verbose
-    - cargo build --verbose
-    - cargo test --verbose
-    - rustup component add rustfmt
-    - cargo fmt --all -- --check
-    - rustup component add clippy
-    - cargo clippy -- -D warnings
+    - ./check
 
 rust-nightly:
   stage: stage1
   image: rustlang/rust:nightly
   script:
-    - cargo check --verbose
-    - cargo build --verbose
-    - cargo test --verbose
-    - rustup component add rustfmt
-    - cargo fmt --all -- --check
-    - rustup component add clippy
-    - cargo clippy -- -D warnings
+    - ./check
   allow_failure: true
