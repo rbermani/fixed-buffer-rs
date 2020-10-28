@@ -139,9 +139,4 @@ https://docs.rs/fixed-buffer
 
 ## Release Process
 1. Edit `Cargo.toml` and bump version number.
-1. `git add Cargo.toml`
-1. `git commit -m 'Release vNNN'`
-1. `git tag -m "vNNN" vNNN`
-1. `git push --follow-tags`
-1. `cargo publish --dry-run`
-1. `cargo publish`
+1. Run `./publish.sh`
