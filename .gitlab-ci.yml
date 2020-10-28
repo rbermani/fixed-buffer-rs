@@ -2,6 +2,8 @@
 # https://users.rust-lang.org/t/my-gitlab-config-docs-tests/16396/3
 # https://docs.gitlab.com/ee/ci/yaml/
 
+# TODO(https://github.com/rust-lang/docker-rust/issues/14) Run on rust:beta image once it is available.
+
 stages:
   - stage1
 
@@ -21,12 +23,6 @@ cache:
 rust-latest:
   stage: stage1
   image: rust:latest
-  script:
-    - ./check.sh
-
-rust-beta:
-  stage: stage1
-  image: rust:beta
   script:
     - ./check.sh
 
