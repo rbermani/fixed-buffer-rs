@@ -22,6 +22,7 @@ rust-latest:
   stage: stage1
   image: rust:latest
   script:
+    - cd $CI_PROJECT_DIR
     - ./check.sh
 
 rust-beta:
@@ -29,11 +30,13 @@ rust-beta:
   # Switch to official rust:beta image once it is available: https://github.com/rust-lang/docker-rust/issues/14
   image: instrumentisto/rust:beta
   script:
+    - cd $CI_PROJECT_DIR
     - ./check.sh
 
 rust-nightly:
   stage: stage1
   image: rustlang/rust:nightly
   script:
+    - cd $CI_PROJECT_DIR
     - ./check.sh
   allow_failure: true
