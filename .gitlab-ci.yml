@@ -24,6 +24,12 @@ rust-latest:
   script:
     - ./check.sh
 
+rust-beta:
+  stage: stage1
+  image: rust:beta
+  script:
+    - ./check.sh
+
 rust-nightly:
   stage: stage1
   image: rustlang/rust:nightly

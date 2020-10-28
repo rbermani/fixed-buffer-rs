@@ -139,4 +139,4 @@ https://docs.rs/fixed-buffer
 
 ## Release Process
 1. Edit `Cargo.toml` and bump version number.
-1. Run `./publish.sh`
+1. Run `./release.sh`
