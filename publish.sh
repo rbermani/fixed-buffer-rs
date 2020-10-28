@@ -43,5 +43,5 @@ fi
 
 set -e
 set -x
-./git-push.sh
+git push --follow-tags
 cargo publish
