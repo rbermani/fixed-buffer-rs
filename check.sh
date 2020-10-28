@@ -7,9 +7,9 @@ check() {
   time cargo fmt --all -- --check
   time rustup component add clippy
   time cargo clippy -- -D warnings
-  time cargo publish --dry-run
+  time cargo publish --dry-run "$@"
   echo "$0 finished"
 }
 set -e
 set -x
-time check
+time check "$@"
