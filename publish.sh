@@ -5,6 +5,11 @@
   ./check.sh
 ) || exit 1
 
+if ! (git branch --show-current | grep -q -E '^main$'); then
+  echo "Current git branch is not main."
+  exit 1
+fi
+
 # Get version line from Cargo.toml.
 version_line=$(grep -E '^\s*version\s*=\s*".*"\s*$' <Cargo.toml)
 if [ -z "$version_line" ]; then
@@ -21,8 +26,8 @@ fi
 
 # Create git tag pointing at HEAD, if it doesn't already exist.
 tag="v$version"
-if [ -n "$(git tag --list $tag)" ]; then
-  if [ -n "$(git tag --list $tag --points-at HEAD)" ]; then
+if [ -n "$(git tag --list "$tag")" ]; then
+  if [ -n "$(git tag --list "$tag" --points-at HEAD)" ]; then
     echo "git tag '$tag' already exists and points at HEAD"
   else
     echo "git tag '$tag' already exists and doesn't point at HEAD.  Did you forget to bump the version in Cargo.toml?"
