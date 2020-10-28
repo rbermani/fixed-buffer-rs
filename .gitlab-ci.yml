@@ -22,11 +22,11 @@ rust-latest:
   stage: stage1
   image: rust:latest
   script:
-    - ./check
+    - ./check.sh
 
 rust-nightly:
   stage: stage1
   image: rustlang/rust:nightly
   script:
-    - ./check
+    - ./check.sh
   allow_failure: true
