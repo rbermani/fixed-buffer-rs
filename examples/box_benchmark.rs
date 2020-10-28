@@ -1,6 +1,5 @@
 /// Program to compare heap memory usage of
 /// `Box<FixedBuf<[u8; 256]>>` and `FixedBuf<Box<[u8; 256]>>`.
-
 use std::println;
 
 use clap::arg_enum;

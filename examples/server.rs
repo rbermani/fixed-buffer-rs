@@ -1,5 +1,4 @@
 /// Example server that uses `fixed_buffer` crate to parse a simple line-based protocol.
-
 use crc::Hasher32;
 use fixed_buffer::FixedBuf;
 use std::io::{Error, ErrorKind};
