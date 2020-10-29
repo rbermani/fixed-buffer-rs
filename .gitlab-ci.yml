@@ -22,6 +22,7 @@ rust-latest:
   stage: stage1
   image: rust:latest
   script:
+    - rustup component add rustfmt clippy
     - ./check.sh
 
 rust-beta:
@@ -29,6 +30,7 @@ rust-beta:
   # Switch to official rust:beta image once it is available: https://github.com/rust-lang/docker-rust/issues/14
   image: instrumentisto/rust:beta
   script:
+    - rustup component add rustfmt clippy
     - ./check.sh
 
 rust-nightly:
