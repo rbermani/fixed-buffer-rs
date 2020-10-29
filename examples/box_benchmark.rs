@@ -38,15 +38,15 @@ fn main() {
             println!("Making 1M Box<FixedBuf<[u8; 256]>> structs");
             let mut v: Vec<Box<FixedBuf<[u8; 256]>>> = Vec::new();
             for _ in 0..(1024 * 1024) {
-                v.push(Box::new(FixedBuf::new()));
+                v.push(Box::new(FixedBuf::new_with_mem([0; 256])));
             }
             print_active_mem();
         }
         BufType::FixedBufBox => {
             println!("Making 1M FixedBuf<Box<[u8; 256]>> structs");
-            let mut v: Vec<FixedBuf<Box<[u8; 256]>>> = Vec::new();
+            let mut v: Vec<FixedBuf<Box<[u8]>>> = Vec::new();
             for _ in 0..(1024 * 1024) {
-                v.push(FixedBuf::new());
+                v.push(FixedBuf::new_with_mem(Box::new([0; 256])));
             }
             print_active_mem();
         }
