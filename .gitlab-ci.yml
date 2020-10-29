@@ -40,8 +40,11 @@ rust-beta:
 rust-nightly:
   stage: stage1
   image: rustlang/rust:nightly
+  variables:
+    CFG_RELEASE_CHANNEL: nightly
+    CFG_RELEASE: nightly
   script:
-    - rustup component add rustfmt || cargo install --git https://github.com/rust-lang/rustfmt/ --force rustfmt-nightly
+    - rustup component add rustfmt || cargo +nightly install --git https://github.com/rust-lang/rustfmt.git --branch master --force --features "rustfmt cargo-fmt" rustfmt-nightly
     - rustup component add clippy || cargo install --git https://github.com/rust-lang/rust-clippy/ --force clippy
     - ./check.sh
   allow_failure: true
