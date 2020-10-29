@@ -10,6 +10,10 @@ variables:
 
 before_script:
   - rustc --version && cargo --version
+  - du -sh target/ cargo/ || true
+
+after_script:
+  - du -sh target/ cargo/ || true
 
 cache:
   # Increment the 'gen' number to clear the caches.
