@@ -20,20 +20,20 @@ cache:
 
 rust-latest:
   stage: stage1
-  image: rust:slim
+  image: rust:latest
   script:
     - ./check.sh
 
 rust-beta:
   stage: stage1
   # Switch to official rust:beta image once it is available: https://github.com/rust-lang/docker-rust/issues/14
-  image: instrumentisto/rust:beta-slim
+  image: instrumentisto/rust:beta
   script:
     - ./check.sh
 
 rust-nightly:
   stage: stage1
-  image: rustlang/rust:nightly-slim
+  image: rustlang/rust:nightly
   script:
     - ./check.sh
   allow_failure: true
