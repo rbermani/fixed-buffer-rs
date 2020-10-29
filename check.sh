@@ -1,4 +1,7 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
+# This script uses bash because it has a built-in 'time' command.
+# The rust docker images have no 'time' binary and use dash for 'sh' which has
+# no built-in 'time' command.
 check() {
   time cargo check --verbose
   time cargo build --verbose
