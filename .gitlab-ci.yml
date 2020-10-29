@@ -11,15 +11,10 @@ variables:
 before_script:
   - rustc --version && cargo --version
 
-after_script:
-  - cd "$CI_PROJECT_DIR"
-  - echo "Deleting cached files older than 90 days"
-  - find target/ cargo/ -type f -mtime +90 -exec ls -alF {} \;
-  - find target/ cargo/ -type f -mtime +90 -exec rm -vf {} \;
-
 cache:
   when: always
-  key: $CI_JOB_NAME
+  # Increment the 'gen' number to clear the caches.
+  key: $CI_JOB_NAME-$CI_COMMIT_BRANCH-gen1
   paths:
     - target/
     - cargo/
