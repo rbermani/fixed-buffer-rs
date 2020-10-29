@@ -43,7 +43,11 @@ rust-nightly:
     CFG_RELEASE_CHANNEL: nightly
     CFG_RELEASE: nightly
   script:
-    - rustup component add rustfmt || cargo +nightly install --git https://github.com/rust-lang/rustfmt.git --branch master --force --features "rustfmt cargo-fmt" rustfmt-nightly
-    - rustup component add clippy || cargo install --git https://github.com/rust-lang/rust-clippy/ --force clippy
+    # Simplify this once either issue is addressed:
+    # "Support nightly CI" https://github.com/rust-lang/rustfmt/issues/4498
+    # "Include rustfmt and clippy" https://github.com/rust-lang/docker-rust-nightly/issues/25
+    # "Include rustfmt and clippy components by default" https://github.com/rust-lang/docker-rust/issues/37
+    - cargo fmt --version || rustup component add rustfmt || cargo +nightly install --git https://github.com/rust-lang/rustfmt.git --branch master --force --features "rustfmt cargo-fmt" rustfmt-nightly
+    - cargo clippy --version || rustup component add clippy || cargo install --git https://github.com/rust-lang/rust-clippy/ --force clippy
     - ./check.sh
   allow_failure: true
