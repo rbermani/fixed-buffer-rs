@@ -9,6 +9,7 @@ This is a Rust library with fixed-size buffers, useful for network protocol pars
 - Use it to read a stream, search for a delimiter, and save leftover bytes for the next read.
 - Easy to learn & use.  Easy to maintain code that uses it.
 - Works with Rust `latest`, `beta`, and `nightly`
+- No macros
 
 ## Limitations
 - Not a circular buffer.
@@ -136,6 +137,9 @@ https://docs.rs/fixed-buffer
 - DONE - Publish to creates.io
 - DONE - Read through https://crate-ci.github.io/index.html
 - DONE - Get a code review from an experienced rustacean
+- DONE - Add and update a changelog
+  - Update it manually
+  - https://crate-ci.github.io/release/changelog.html
 - Add features: std, tokio, async-std
 - Simplify `read_delimited()`
 - Make a more generic read_frame that takes a frame detector function.
@@ -153,5 +157,3 @@ https://docs.rs/fixed-buffer
   - Linux ARM 64-bit (Raspberry Pi 3 and newer)
   - Linux ARM 32-bit (Raspberry Pi 2)
   - RISCV & ESP32 firmware?
-- Add and update a changelog
-  - https://crate-ci.github.io/release/changelog.html
