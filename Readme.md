@@ -96,6 +96,25 @@ https://docs.rs/fixed-buffer
 - [static-buffer](https://crates.io/crates/static-buffer), updated in 2016
 - [block-buffer](https://crates.io/crates/block-buffer), for processing fixed-length blocks of data
 
+## Release Process
+1. Edit `Cargo.toml` and bump version number.
+1. Run `./release.sh`
+
+## Changelog
+- v0.1.3
+  - Thanks to [freax13](https://gitlab.com/Freax13) for these changes:
+    - Support any buffer size.  Now you can make `FixedBuf<[u8; 42]>`.
+    - Support any AsRef<[u8]> + AsMut<[u8]> value for internal memory:
+      - `[u8; N]`
+      - `Box<[u8; N]>`
+      - `&mut [u8]`
+      - `Vec<u8>`
+  - Renamed `new_with_mem` to `new`.
+    Use `FixedBuf::default()` to construct any `FixedBuf<T: Default>`, which includes
+    [arrays of sizes up to 32](https://doc.rust-lang.org/std/primitive.array.html).
+- v0.1.2 - Updated documentation.
+- v0.1.1 - First published version
+
 ## TODO
 - DONE - Try to make this crate comply with the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/).
 - DONE - Find out how to include Readme.md info in the crate's docs.
@@ -136,23 +155,3 @@ https://docs.rs/fixed-buffer
   - RISCV & ESP32 firmware?
 - Add and update a changelog
   - https://crate-ci.github.io/release/changelog.html
-
-## Release Process
-1. Edit `Cargo.toml` and bump version number.
-1. Run `./release.sh`
-
-## Changelog
-
-- v0.1.3
-  - Thanks to [freax13](https://gitlab.com/Freax13) for these changes:
-    - Support any buffer size.  Now you can make `FixedBuf<[u8; 42]>`.
-    - Support any AsRef<[u8]> + AsMut<[u8]> value for internal memory:
-      - `[u8; N]`
-      - `Box<[u8; N]>`
-      - `&mut [u8]`
-      - `Vec<u8>`
-  - Renamed `new_with_mem` to `new`.
-    Use `FixedBuf::default()` to construct any `FixedBuf<T: Default>`, which includes
-    [arrays of sizes up to 32](https://doc.rust-lang.org/std/primitive.array.html).
-- v0.1.2 - Updated documentation.
-- v0.1.1 - First published version
