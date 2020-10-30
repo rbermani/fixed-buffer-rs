@@ -38,7 +38,7 @@ fn main() {
             println!("Making 1M Box<FixedBuf<[u8; 256]>> structs");
             let mut v: Vec<Box<FixedBuf<[u8; 256]>>> = Vec::new();
             for _ in 0..(1024 * 1024) {
-                v.push(Box::new(FixedBuf::new_with_mem([0; 256])));
+                v.push(Box::new(FixedBuf::new([0; 256])));
             }
             print_active_mem();
         }
@@ -46,7 +46,7 @@ fn main() {
             println!("Making 1M FixedBuf<Box<[u8; 256]>> structs");
             let mut v: Vec<FixedBuf<Box<[u8]>>> = Vec::new();
             for _ in 0..(1024 * 1024) {
-                v.push(FixedBuf::new_with_mem(Box::new([0; 256])));
+                v.push(FixedBuf::new(Box::new([0; 256])));
             }
             print_active_mem();
         }
@@ -58,4 +58,4 @@ fn main() {
 // 328.1 MiB active memory
 // $ cargo run --package fixed-buffer --example box_benchmark FixedBufBox
 // Making 1M FixedBuf<Box<[u8; 256]>> structs
-// 280.1 MiB active memory
+// 288.1 MiB active memory

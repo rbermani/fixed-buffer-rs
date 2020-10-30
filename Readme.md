@@ -26,7 +26,7 @@ use tokio::net::TcpStream;
 
 async fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), Error> {
     let (mut input, mut output) = tcp_stream.split();
-    let mut buf: FixedBuf<[u8; 4096]> = FixedBuf::new();
+    let mut buf: FixedBuf<[u8; 4096]> = FixedBuf::new([0; 4096]);
     loop {
         // Read a line and leave leftover bytes in `buf`.
         let line_bytes: &[u8] = buf.read_delimited(&mut input, b"\n").await?;
@@ -55,7 +55,7 @@ fn try_process_record(b: &[u8]) -> Result<usize, Error> {
 
 async fn read_and_process<R: tokio::io::AsyncRead + Unpin>(mut input: R)
     -> Result<(), Error> {
-    let mut buf: FixedBuf<[u8; 1024]> = FixedBuf::new();
+    let mut buf: FixedBuf<[u8; 1024]> = FixedBuf::new([0; 1024]);
     loop {
         // Read a chunk into the buffer.
         let mut writable = buf.writable()
@@ -116,7 +116,7 @@ https://docs.rs/fixed-buffer
   - https://crates.io/crates/string-wrapper
 - DONE - Publish to creates.io
 - DONE - Read through https://crate-ci.github.io/index.html
-- Get a code review from an experienced rustacean
+- DONE - Get a code review from an experienced rustacean
 - Add features: std, tokio, async-std
 - Simplify `read_delimited()`
 - Make a more generic read_frame that takes a frame detector function.
@@ -140,3 +140,19 @@ https://docs.rs/fixed-buffer
 ## Release Process
 1. Edit `Cargo.toml` and bump version number.
 1. Run `./release.sh`
+
+## Changelog
+
+- v0.1.3
+  - Thanks to [freax13](https://gitlab.com/Freax13) for these changes:
+    - Support any buffer size.  Now you can make `FixedBuf<[u8; 42]>`.
+    - Support any AsRef<[u8]> + AsMut<[u8]> value for internal memory:
+      - `[u8; N]`
+      - `Box<[u8; N]>`
+      - `&mut [u8]`
+      - `Vec<u8>`
+  - Renamed `new_with_mem` to `new`.
+    Use `FixedBuf::default()` to construct any `FixedBuf<T: Default>`, which includes
+    [arrays of sizes up to 32](https://doc.rust-lang.org/std/primitive.array.html).
+- v0.1.2 - Updated documentation.
+- v0.1.1 - First published version
