@@ -96,6 +96,7 @@ https://docs.rs/fixed-buffer
 - [std::io::BufWriter](https://doc.rust-lang.org/std/io/struct.BufWriter.html)
 - [static-buffer](https://crates.io/crates/static-buffer), updated in 2016
 - [block-buffer](https://crates.io/crates/block-buffer), for processing fixed-length blocks of data
+- [arrayvec](https://crates.io/crates/arrayvec), vector with fixed capacity.
 
 ## Release Process
 1. Edit `Cargo.toml` and bump version number.
