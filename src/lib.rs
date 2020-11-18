@@ -177,6 +177,12 @@ impl<T> FixedBuf<T> {
     pub fn is_empty(&self) -> bool {
         self.write_index == self.read_index
     }
+
+    /// Discards all data in the buffer.
+    pub fn clear(&mut self) {
+        self.read_index = 0;
+        self.write_index = 0;
+    }
 }
 
 impl<T: AsRef<[u8]>> FixedBuf<T> {
@@ -733,6 +739,15 @@ mod tests {
         buf.write_str("abc").unwrap();
         assert!(!buf.is_empty());
         buf.read_all();
+        assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn test_clear() {
+        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        buf.write_str("abc").unwrap();
+        assert_eq!(3, buf.len());
+        buf.clear();
         assert!(buf.is_empty());
     }
 
