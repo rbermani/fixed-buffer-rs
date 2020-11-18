@@ -103,6 +103,7 @@ https://docs.rs/fixed-buffer
 1. Run `./release.sh`
 
 ## Changelog
+- v0.1.4 - Add `clear()`.
 - v0.1.3
   - Thanks to [freax13](https://gitlab.com/Freax13) for these changes:
     - Support any buffer size.  Now you can make `FixedBuf<[u8; 42]>`.
