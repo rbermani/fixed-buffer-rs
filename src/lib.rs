@@ -727,6 +727,16 @@ mod tests {
     }
 
     #[test]
+    fn test_is_empty() {
+        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        assert!(buf.is_empty());
+        buf.write_str("abc").unwrap();
+        assert!(!buf.is_empty());
+        buf.read_all();
+        assert!(buf.is_empty());
+    }
+
+    #[test]
     fn test_write_str() {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
         buf.write_str("a").unwrap();
