@@ -106,6 +106,7 @@ https://docs.rs/fixed-buffer
 1. Run `./release.sh`
 
 ## Changelog
+- v0.1.5 - Change `read_delimited` to return `Option<&[u8]>`, for clean EOF handling.
 - v0.1.4 - Add `clear()`.
 - v0.1.3
   - Thanks to [freax13](https://gitlab.com/Freax13) for these changes:
