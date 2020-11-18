@@ -333,20 +333,20 @@ impl<T: AsRef<[u8]> + AsMut<[u8]>> FixedBuf<T> {
     ///
     /// Returns `Err(Error(InvalidData,_))` if the buffer fills up before `delim` is found.
     ///
+    /// Returns `Err(Error(UnexpectedEof,_))` when `input`
+    /// returns some bytes without `delim` at the end and then closes (EOF).
+    ///
     /// Demo:
     /// ```
     /// # use fixed_buffer::{escape_ascii, FixedBuf};
     /// # tokio_test::block_on(async {
     /// let mut buf: FixedBuf<[u8; 32]> = FixedBuf::new([0u8; 32]);
     /// let mut input = std::io::Cursor::new(b"aaa\nbbb\n\nccc\n");
-    /// assert_eq!("aaa", escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap()));
-    /// assert_eq!("bbb", escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap()));
-    /// assert_eq!("",    escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap()));
-    /// assert_eq!("ccc", escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap()));
-    /// assert_eq!(
-    ///     std::io::ErrorKind::NotFound,
-    ///     buf.read_delimited(&mut input, b"\n").await.unwrap_err().kind()
-    /// );
+    /// assert_eq!("aaa", escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap().unwrap()));
+    /// assert_eq!("bbb", escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap().unwrap()));
+    /// assert_eq!("",    escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap().unwrap()));
+    /// assert_eq!("ccc", escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap().unwrap()));
+    /// assert_eq!(None,  buf.read_delimited(&mut input, b"\n").await.unwrap());
     /// # })
     /// ```
     ///
@@ -372,7 +372,10 @@ impl<T: AsRef<[u8]> + AsMut<[u8]>> FixedBuf<T> {
     /// let mut buf: FixedBuf<[u8; 1024]> = FixedBuf::new([0; 1024]);
     /// loop {
     ///     // Read a line and leave leftover bytes in `buf`.
-    ///     let line_bytes: &[u8] = buf.read_delimited(&mut input, b"\n").await?;
+    ///     let line_bytes = match buf.read_delimited(&mut input, b"\n").await? {
+    ///         Some(line_bytes) => line_bytes,
+    ///         None => return Ok(()),
+    ///     };
     ///     let request = Request::parse(line_bytes)?;
     ///     // Read any request payload from `buf` + `TcpStream`.
     ///     let payload_reader = tokio::io::AsyncReadExt::chain(&mut buf, &mut input);
@@ -383,7 +386,11 @@ impl<T: AsRef<[u8]> + AsMut<[u8]>> FixedBuf<T> {
     ///
     /// [`shift`]: #method.shift
     /// [`tokio::io::AsyncRead`]: https://docs.rs/tokio/0.3.0/tokio/io/trait.AsyncRead.html
-    pub async fn read_delimited<R>(&mut self, mut input: R, delim: &[u8]) -> std::io::Result<&[u8]>
+    pub async fn read_delimited<R>(
+        &mut self,
+        mut input: R,
+        delim: &[u8],
+    ) -> std::io::Result<Option<&[u8]>>
     where
         R: tokio::io::AsyncRead + std::marker::Unpin + Send,
     {
@@ -399,7 +406,7 @@ impl<T: AsRef<[u8]> + AsMut<[u8]>> FixedBuf<T> {
                 let result_start = self.read_index;
                 let result_end = self.read_index + delim_index;
                 self.read_bytes(delim_index + delim.len());
-                return Ok(&self.mem.as_ref()[result_start..result_end]);
+                return Ok(Some(&self.mem.as_ref()[result_start..result_end]));
             }
             self.shift();
             let writable = self.writable().ok_or_else(|| {
@@ -407,11 +414,8 @@ impl<T: AsRef<[u8]> + AsMut<[u8]>> FixedBuf<T> {
             })?;
             let num_bytes_read = tokio::io::AsyncReadExt::read(&mut input, writable).await?;
             if num_bytes_read == 0 {
-                if self.read_index == 0 {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::NotFound,
-                        "eof with no data read",
-                    ));
+                if self.is_empty() {
+                    return Ok(None);
                 }
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::UnexpectedEof,
@@ -829,61 +833,91 @@ mod tests {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
         assert_eq!("", escape_ascii(buf.readable()));
         let mut input = std::io::Cursor::new(b"aaa\nbbb\n\nccc\n");
+
         assert_eq!(
             "aaa",
-            escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap())
+            escape_ascii(
+                buf.read_delimited(&mut input, b"\n")
+                    .await
+                    .unwrap()
+                    .unwrap()
+            )
         );
         assert_eq!(
             "bbb",
-            escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap())
+            escape_ascii(
+                buf.read_delimited(&mut input, b"\n")
+                    .await
+                    .unwrap()
+                    .unwrap()
+            )
         );
         assert_eq!(
             "",
-            escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap())
+            escape_ascii(
+                buf.read_delimited(&mut input, b"\n")
+                    .await
+                    .unwrap()
+                    .unwrap()
+            )
         );
         assert_eq!(
             "ccc",
-            escape_ascii(buf.read_delimited(&mut input, b"\n").await.unwrap())
+            escape_ascii(
+                buf.read_delimited(&mut input, b"\n")
+                    .await
+                    .unwrap()
+                    .unwrap()
+            )
         );
-        assert_eq!(
-            std::io::ErrorKind::NotFound,
-            buf.read_delimited(&mut input, b"\n")
-                .await
-                .unwrap_err()
-                .kind()
-        );
+        assert_eq!(None, buf.read_delimited(&mut input, b"\n").await.unwrap());
     }
 
     #[tokio::test]
     async fn test_read_delimited_empty() {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut input = std::io::Cursor::new(b"");
+        assert_eq!(None, buf.read_delimited(&mut input, b"b").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_read_delimited_eof() {
+        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut input = std::io::Cursor::new("aaaXbbbX");
         assert_eq!(
-            std::io::ErrorKind::NotFound,
-            buf.read_delimited(&mut std::io::Cursor::new(""), b"b")
-                .await
-                .unwrap_err()
-                .kind()
+            "aaa",
+            escape_ascii(buf.read_delimited(&mut input, b"X").await.unwrap().unwrap())
         );
+        assert_eq!(
+            "bbb",
+            escape_ascii(buf.read_delimited(&mut input, b"X").await.unwrap().unwrap())
+        );
+        assert_eq!(None, buf.read_delimited(&mut input, b"d").await.unwrap());
+        assert_eq!(None, buf.read_delimited(&mut input, b"d").await.unwrap());
     }
 
     #[tokio::test]
     async fn test_read_delimited_not_found_eof() {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut input = std::io::Cursor::new("aaaXbbb");
         assert_eq!(
-            std::io::ErrorKind::NotFound,
-            buf.read_delimited(&mut std::io::Cursor::new("abc"), b"d")
+            "aaa",
+            escape_ascii(buf.read_delimited(&mut input, b"X").await.unwrap().unwrap())
+        );
+        assert_eq!(
+            std::io::ErrorKind::UnexpectedEof,
+            buf.read_delimited(&mut input, b"X")
                 .await
                 .unwrap_err()
                 .kind()
         );
-        buf.read_all();
     }
 
     #[tokio::test]
     async fn test_read_delimited_not_found_buffer_almost_full() {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
         assert_eq!(
-            std::io::ErrorKind::NotFound,
+            std::io::ErrorKind::UnexpectedEof,
             buf.read_delimited(&mut std::io::Cursor::new(&"b".repeat(15)), b"d")
                 .await
                 .unwrap_err()
@@ -906,28 +940,46 @@ mod tests {
     #[tokio::test]
     async fn test_read_delimited_found() {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut input = std::io::Cursor::new("aaaX");
         assert_eq!(
-            "ab",
-            escape_ascii(
-                buf.read_delimited(&mut std::io::Cursor::new("abc"), b"c")
-                    .await
-                    .unwrap()
-            )
+            "aaa",
+            escape_ascii(buf.read_delimited(&mut input, b"X").await.unwrap().unwrap())
         );
     }
 
     #[tokio::test]
     async fn test_read_delimited_found_with_leftover() {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut input = std::io::Cursor::new("aaaXbbb");
         assert_eq!(
-            "ab",
+            "aaa",
+            escape_ascii(buf.read_delimited(&mut input, b"X").await.unwrap().unwrap())
+        );
+        assert_eq!("bbb", escape_ascii(buf.read_all()));
+    }
+
+    #[tokio::test]
+    async fn test_read_delimited_long_delimiter() {
+        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut input = std::io::Cursor::new("aaaXYZbbbXYZ");
+        assert_eq!(
+            "aaa",
             escape_ascii(
-                buf.read_delimited(&mut std::io::Cursor::new("abcdef"), b"c")
+                buf.read_delimited(&mut input, b"XYZ")
                     .await
+                    .unwrap()
                     .unwrap()
             )
         );
-        assert_eq!("def", escape_ascii(buf.read_all()));
+        assert_eq!(
+            "bbb",
+            escape_ascii(
+                buf.read_delimited(&mut input, b"XYZ")
+                    .await
+                    .unwrap()
+                    .unwrap()
+            )
+        );
     }
 
     struct AsyncReadableThatPanics;
@@ -945,21 +997,20 @@ mod tests {
     #[tokio::test]
     async fn test_read_delimited_already_in_buffer() {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
-        buf.write_str("abc").unwrap();
+        buf.write_str("aaaX").unwrap();
         let mut input = AsyncReadableThatPanics {};
         assert_eq!(
-            "ab",
-            escape_ascii(buf.read_delimited(&mut input, b"c").await.unwrap())
+            "aaa",
+            escape_ascii(buf.read_delimited(&mut input, b"X").await.unwrap().unwrap())
         );
-
-        buf.write_str("aaxbbx").unwrap();
-        assert_eq!(
-            "aa",
-            escape_ascii(buf.read_delimited(&mut input, b"x").await.unwrap())
-        );
+        buf.write_str("bbXcX").unwrap();
         assert_eq!(
             "bb",
-            escape_ascii(buf.read_delimited(&mut input, b"x").await.unwrap())
+            escape_ascii(buf.read_delimited(&mut input, b"X").await.unwrap().unwrap())
+        );
+        assert_eq!(
+            "c",
+            escape_ascii(buf.read_delimited(&mut input, b"X").await.unwrap().unwrap())
         );
     }
 

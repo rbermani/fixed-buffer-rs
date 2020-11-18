@@ -30,7 +30,10 @@ async fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), Error> {
     let mut buf: FixedBuf<[u8; 4096]> = FixedBuf::new([0; 4096]);
     loop {
         // Read a line and leave leftover bytes in `buf`.
-        let line_bytes: &[u8] = buf.read_delimited(&mut input, b"\n").await?;
+        let line_bytes = match buf.read_delimited(&mut input, b"\n").await? {
+            Some(line_bytes) => line_bytes,
+            None => return Ok(()),
+        };
         let request = Request::parse(line_bytes)?;
         // Read any request payload from `buf` + `TcpStream`.
         let payload_reader = tokio::io::AsyncReadExt::chain(&mut buf, &mut input);

@@ -80,7 +80,10 @@ async fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), Error> {
     let (mut input, mut output) = tcp_stream.split();
     let mut buf: FixedBuf<[u8; 4096]> = FixedBuf::new([0; 4096]);
     loop {
-        let line_bytes = buf.read_delimited(&mut input, b"\n").await?;
+        let line_bytes = match buf.read_delimited(&mut input, b"\n").await? {
+            Some(line_bytes) => line_bytes,
+            None => return Ok(()),
+        };
         match Request::parse(line_bytes) {
             Some(Request::Hello) => handle_hello(&mut output).await?,
             Some(Request::Crc32(len)) => {
