@@ -109,13 +109,15 @@ constructor is useful in tests.
 1. Run `./release.sh`
 
 ## Changelog
-- v0.1.6 - Add `filled(mem)` constructor.
-- v0.1.5 - Change `read_delimited` to return `Option<&[u8]>`, for clean EOF handling.
-- v0.1.4 - Add `clear()`.
+- v0.1.6 - Add [`filled`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.filled)
+  constructor.
+- v0.1.5 - Change [`read_delimited`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.read_delimited)
+  to return `Option<&[u8]>`, for clean EOF handling.
+- v0.1.4 - Add [`clear()`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.clear).
 - v0.1.3
   - Thanks to [freax13](https://gitlab.com/Freax13) for these changes:
     - Support any buffer size.  Now you can make `FixedBuf<[u8; 42]>`.
-    - Support any AsRef<[u8]> + AsMut<[u8]> value for internal memory:
+    - Support any `AsRef<[u8]> + AsMut<[u8]>` value for internal memory:
       - `[u8; N]`
       - `Box<[u8; N]>`
       - `&mut [u8]`
