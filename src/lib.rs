@@ -228,6 +228,30 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
         self.mem.as_ref().len()
     }
 
+    /// Copies all readable bytes to a string.
+    /// Includes printable ASCII characters as-is.
+    /// Converts non-printable characters to strings like "\n" and "\x19".
+    ///
+    /// Leaves the buffer unchanged.
+    ///
+    /// Uses [`std::ascii::escape_default`] internally to escape each byte.
+    ///
+    /// This function is useful for printing byte slices to logs and comparing byte slices in tests.
+    ///
+    /// Example test:
+    /// ```
+    /// use fixed_buffer::FixedBuf;
+    /// let mut buf = FixedBuf::new([0u8; 16]);
+    /// buf.write_str("abc");
+    /// buf.write_str("€");
+    /// assert_eq!("abc\\xe2\\x82\\xac", buf.escape_ascii());
+    /// ```
+    ///
+    /// [`std::ascii::escape_default`]: https://doc.rust-lang.org/std/ascii/fn.escape_default.html
+    pub fn escape_ascii(&self) -> String {
+        escape_ascii(self.readable())
+    }
+
     /// Returns the slice of readable bytes in the buffer.
     /// After processing some bytes from the front of the slice, call [`read`]
     /// to consume the bytes.
@@ -663,7 +687,7 @@ impl<T: AsRef<[u8]>> std::fmt::Debug for FixedBuf<T> {
             "FixedBuf{{{} writable, {} readable: \"{}\"}}",
             self.capacity() - self.write_index,
             self.len(),
-            escape_ascii(self.readable())
+            self.escape_ascii()
         )
     }
 }
@@ -877,6 +901,18 @@ mod tests {
         buf.write_str("def").unwrap();
         assert_eq!("def", escape_ascii(buf.read_all()));
         assert_eq!("", escape_ascii(buf.read_all()));
+    }
+
+    #[test]
+    fn test_escape_ascii() {
+        assert_eq!("", FixedBuf::filled(b"").escape_ascii());
+        assert_eq!("abc", FixedBuf::filled(b"abc").escape_ascii());
+        assert_eq!("\\r\\n", FixedBuf::filled(b"\r\n").escape_ascii());
+        assert_eq!("\\xe2\\x82\\xac", FixedBuf::filled("€".as_bytes()).escape_ascii());
+        assert_eq!("\\x01", FixedBuf::filled(b"\x01").escape_ascii());
+        let buf = FixedBuf::filled(b"abc");
+        assert_eq!("abc", buf.escape_ascii());
+        assert_eq!(b"abc", buf.readable());
     }
 
     #[test]
