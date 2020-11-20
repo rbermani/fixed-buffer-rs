@@ -879,6 +879,17 @@ mod tests {
         assert_eq!("", escape_ascii(buf.read_all()));
     }
 
+    #[test]
+    fn test_capacity() {
+        assert_eq!(0, FixedBuf::new([0u8; 0]).capacity());
+        assert_eq!(16, FixedBuf::new([0u8; 16]).capacity());
+        let buf: FixedBuf<Box<[u8]>> = FixedBuf::new(Box::new([0u8; 16]));
+        assert_eq!(16, buf.capacity());
+        let mut mem = [0u8; 16];
+        assert_eq!(16, FixedBuf::new(&mut mem).capacity());
+        assert_eq!(16, FixedBuf::filled([0u8; 16]).capacity());
+    }
+
     #[tokio::test]
     async fn test_read_delimited_example() {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
