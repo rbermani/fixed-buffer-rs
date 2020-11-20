@@ -908,7 +908,10 @@ mod tests {
         assert_eq!("", FixedBuf::filled(b"").escape_ascii());
         assert_eq!("abc", FixedBuf::filled(b"abc").escape_ascii());
         assert_eq!("\\r\\n", FixedBuf::filled(b"\r\n").escape_ascii());
-        assert_eq!("\\xe2\\x82\\xac", FixedBuf::filled("€".as_bytes()).escape_ascii());
+        assert_eq!(
+            "\\xe2\\x82\\xac",
+            FixedBuf::filled("€".as_bytes()).escape_ascii()
+        );
         assert_eq!("\\x01", FixedBuf::filled(b"\x01").escape_ascii());
         let buf = FixedBuf::filled(b"abc");
         assert_eq!("abc", buf.escape_ascii());
