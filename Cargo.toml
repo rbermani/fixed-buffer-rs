@@ -8,7 +8,7 @@ license = "Apache-2.0"
 name = "fixed-buffer"
 readme = "Readme.md"
 repository = "https://gitlab.com/leonhard-llc/fixed-buffer-rs"
-version = "0.1.5"
+version = "0.1.6"
 
 [dependencies]
 tokio = { version = "0.3", features = ["io-util"] }

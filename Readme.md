@@ -109,6 +109,7 @@ constructor is useful in tests.
 1. Run `./release.sh`
 
 ## Changelog
+- v0.1.6 - Add `filled(mem)` constructor.
 - v0.1.5 - Change `read_delimited` to return `Option<&[u8]>`, for clean EOF handling.
 - v0.1.4 - Add `clear()`.
 - v0.1.3
