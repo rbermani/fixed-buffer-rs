@@ -92,6 +92,9 @@ async fn read_and_process<R: tokio::io::AsyncRead + Unpin>(mut input: R)
 ## Documentation
 https://docs.rs/fixed-buffer
 
+The [`filled`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.filled)
+constructor is useful in tests.
+
 ## Alternatives
 - [bytes](https://docs.rs/bytes/0.5.6/bytes/index.html)
 - [buf_redux](https://crates.io/crates/buf_redux), circular buffer support

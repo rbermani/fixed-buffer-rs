@@ -186,6 +186,34 @@ impl<T> FixedBuf<T> {
 }
 
 impl<T: AsRef<[u8]>> FixedBuf<T> {
+    /// Makes a new full buffer, consuming or borrowing `mem`
+    /// and using it as the internal memory array.
+    /// Reading the buffer will return the bytes in `mem`.
+    ///
+    /// You can write to the returned buf if `mem` implements `AsMut<[u8]`.
+    ///
+    /// For details, see [`new`].
+    ///
+    /// Examples:
+    /// ```
+    /// # use fixed_buffer::FixedBuf;
+    /// // Readable, not writable:
+    /// let mut buf1 = FixedBuf::filled(b"abc");
+    ///
+    /// // Readable and writable:
+    /// let mut buf2 = FixedBuf::filled([0u8; 42]);
+    /// let mut buf3: FixedBuf<[u8; 42]> = FixedBuf::filled([0u8; 42]);
+    /// let mut buf4: FixedBuf<Box<[u8]>> = FixedBuf::filled(Box::new([0u8; 42]));
+    /// // Your editor may incorrectly report "mismatched types [E0308]" --^
+    /// ```
+    pub fn filled(mem: T) -> Self {
+        Self {
+            write_index: mem.as_ref().len(),
+            read_index: 0,
+            mem,
+        }
+    }
+
     /// Returns the maximum number of bytes that can be stored in the buffer.
     ///
     /// Example:
@@ -713,6 +741,30 @@ mod tests {
     }
 
     #[test]
+    fn test_filled_const() {
+        let mut buf = FixedBuf::filled(b"abc");
+        assert_eq!("abc", escape_ascii(buf.read_all()));
+    }
+
+    #[test]
+    fn test_filled_array() {
+        let mut buf = FixedBuf::filled([7u8; 10]);
+        assert_eq!(&[7], buf.read_bytes(1));
+        buf.write_bytes(&[42u8]).unwrap_err();
+        buf.shift();
+        buf.write_bytes(&[42u8]).unwrap();
+    }
+
+    #[test]
+    fn test_filled_box_array() {
+        let mut buf: FixedBuf<Box<[u8]>> = FixedBuf::filled(Box::new([7u8; 10]));
+        assert_eq!(&[7], buf.read_bytes(1));
+        buf.write_bytes(&[42u8]).unwrap_err();
+        buf.shift();
+        buf.write_bytes(&[42u8]).unwrap();
+    }
+
+    #[test]
     fn empty() {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
         assert_eq!("", escape_ascii(buf.readable()));
@@ -748,8 +800,7 @@ mod tests {
 
     #[test]
     fn test_clear() {
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
-        buf.write_str("abc").unwrap();
+        let mut buf = FixedBuf::filled(b"abc");
         assert_eq!(3, buf.len());
         buf.clear();
         assert!(buf.is_empty());
