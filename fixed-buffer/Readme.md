@@ -1,4 +1,5 @@
 # fixed-buffer
+
 This is a Rust library with fixed-size buffers, useful for network protocol parsers.
 
 ## Features
@@ -18,6 +19,7 @@ This is a Rust library with fixed-size buffers, useful for network protocol pars
   Because of borrowing rules, such a function would need to return non-borrowed (allocated and copied) data.
 
 ## Examples
+TODO(mleonhard) Remove tokio from examples.
 Read and handle requests from a remote client:
 ```rust
 use fixed_buffer::FixedBuf;
@@ -129,7 +131,7 @@ constructor is useful in tests.
 - v0.1.2 - Updated documentation.
 - v0.1.1 - First published version
 
-## TODO
+## TO DO
 - DONE - Try to make this crate comply with the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/).
 - DONE - Find out how to include Readme.md info in the crate's docs.
 - DONE - Make the repo public
@@ -170,3 +172,5 @@ constructor is useful in tests.
   - Linux ARM 64-bit (Raspberry Pi 3 and newer)
   - Linux ARM 32-bit (Raspberry Pi 2)
   - RISCV & ESP32 firmware?
+
+License: Apache-2.0
