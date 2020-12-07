@@ -4,6 +4,7 @@ This is a Rust library with fixed-size buffers,
 useful for network protocol parsers and file parsers.
 
 ## Features
+- [![unsafe forbidden](https://gitlab.com/leonhard-llc/fixed-buffer-rs/-/raw/main/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
 - Write bytes to the buffer and read them back
 - Lives on the stack
 - Does not allocate memory
