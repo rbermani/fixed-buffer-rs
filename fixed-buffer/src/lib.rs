@@ -252,8 +252,6 @@ pub struct FixedBuf<T> {
     write_index: usize,
 }
 
-impl<T> Unpin for FixedBuf<T> {}
-
 impl<T> FixedBuf<T> {
     /// Makes a new empty buffer, consuming or borrowing `mem`
     /// and using it as the internal memory array.
