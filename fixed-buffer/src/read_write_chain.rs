@@ -18,6 +18,7 @@ pub struct ReadWriteChain<'a, R: std::io::Read, RW: std::io::Read + std::io::Wri
     reader: Option<&'a mut R>,
     read_writer: &'a mut RW,
 }
+
 impl<'a, R: std::io::Read, RW: std::io::Read + std::io::Write> ReadWriteChain<'a, R, RW> {
     /// See [`ReadWriteChain`](struct.ReadWriteChain.html).
     pub fn new(reader: &'a mut R, read_writer: &'a mut RW) -> ReadWriteChain<'a, R, RW> {
@@ -27,6 +28,7 @@ impl<'a, R: std::io::Read, RW: std::io::Read + std::io::Write> ReadWriteChain<'a
         }
     }
 }
+
 impl<'a, R: std::io::Read, RW: std::io::Read + std::io::Write> std::io::Read
     for ReadWriteChain<'a, R, RW>
 {
@@ -44,12 +46,14 @@ impl<'a, R: std::io::Read, RW: std::io::Read + std::io::Write> std::io::Read
         self.read_writer.read(buf)
     }
 }
+
 impl<'a, R: std::io::Read, RW: std::io::Read + std::io::Write> std::io::Write
     for ReadWriteChain<'a, R, RW>
 {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
         self.read_writer.write(buf)
     }
+
     fn flush(&mut self) -> Result<(), std::io::Error> {
         self.read_writer.flush()
     }
