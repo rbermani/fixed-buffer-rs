@@ -1,6 +1,15 @@
+//! Program to compare heap memory usage of
+//! `Box<FixedBuf<[u8; 256]>>` and `FixedBuf<Box<[u8; 256]>>`.
+//!
+//! ```
+//! $ cargo run BoxFixedBuf
+//! Making 1M Box<FixedBuf<[u8; 256]>> structs
+//! 328.1 MiB active memory
+//! $ cargo run FixedBufBox
+//! Making 1M FixedBuf<Box<[u8; 256]>> structs
+//! 288.1 MiB active memory
+//! ```
 #![forbid(unsafe_code)]
-/// Program to compare heap memory usage of
-/// `Box<FixedBuf<[u8; 256]>>` and `FixedBuf<Box<[u8; 256]>>`.
 use std::println;
 
 use clap::arg_enum;
@@ -53,10 +62,3 @@ fn main() {
         }
     }
 }
-
-// $ cargo run --package fixed-buffer --example box_benchmark BoxFixedBuf
-// Making 1M Box<FixedBuf<[u8; 256]>> structs
-// 328.1 MiB active memory
-// $ cargo run --package fixed-buffer --example box_benchmark FixedBufBox
-// Making 1M FixedBuf<Box<[u8; 256]>> structs
-// 288.1 MiB active memory
