@@ -229,12 +229,6 @@ pub use read_write_take::ReadWriteTake;
 #[derive(Clone, PartialEq, Debug)]
 pub struct NotEnoughSpaceError {}
 
-impl core::fmt::Display for NotEnoughSpaceError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
-        core::fmt::Debug::fmt(self, f)
-    }
-}
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct MalformedInputError(String);
 
