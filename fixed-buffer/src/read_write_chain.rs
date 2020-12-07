@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 // TODO(mleonhard) Test.
 /// A wrapper for a pair of structs.
 /// The first implements [`Read`](https://doc.rust-lang.org/stable/std/io/trait.Read.html).

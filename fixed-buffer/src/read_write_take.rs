@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 // TODO(mleonhard) Test.
 /// Wraps a struct that implements
 /// [`Read`](https://doc.rust-lang.org/stable/std/io/trait.Read.html)+[`Write`](https://doc.rust-lang.org/stable/std/io/trait.Write.html).
