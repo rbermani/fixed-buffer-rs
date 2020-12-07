@@ -1,51 +1,47 @@
+//! Example server that uses `fixed_buffer` crate to parse a simple line-based protocol.
+//!
+//! ```
+//! $ cargo run --package fixed-buffer --example server
+//! SERVER listening on 127.0.0.1:65012
+//! CLIENT connecting
+//! CLIENT sending two requests at the same time: CRC('aaaa') and HELLO
+//! SERVER handling connection
+//! CLIENT got response "ad98e545"
+//! CLIENT got response "HI"
+//! ```
 #![forbid(unsafe_code)]
-/// Example server that uses `fixed_buffer` crate to parse a simple line-based protocol.
+
 use crc::Hasher32;
-use fixed_buffer::FixedBuf;
-use std::io::{Error, ErrorKind};
-use std::net::SocketAddr;
+use fixed_buffer::{FixedBuf, ReadWriteChain, ReadWriteTake};
+use std::io::{ErrorKind, Read, Write};
+use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::println;
-use std::task::Context;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::macros::support::{Pin, Poll};
-use tokio::net::{TcpListener, TcpStream};
+use std::time::Duration;
 
-async fn handle_hello<W: AsyncWrite + Unpin>(mut output: W) -> Result<(), Error> {
-    AsyncWriteExt::write_all(&mut output, "HI\n".as_bytes()).await
+fn handle_hello<RW: Read + Write>(mut read_writer: RW) -> Result<(), std::io::Error> {
+    read_writer.write_all("HI\n".as_bytes())
 }
 
-struct Hasher32AsyncWriter<'a, T: Hasher32>(&'a mut T);
-
-impl<'a, T: Hasher32> AsyncWrite for Hasher32AsyncWriter<'a, T> {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<Result<usize, Error>> {
-        self.get_mut().0.write(buf);
-        Poll::Ready(Ok(buf.len()))
+struct Hasher32Writer<'a, T: Hasher32>(&'a mut T);
+impl<'a, T: Hasher32> Write for Hasher32Writer<'a, T> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
+        self.0.write(buf);
+        Ok(buf.len())
     }
-
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
-        Poll::Ready(Ok(()))
+    fn flush(&mut self) -> Result<(), std::io::Error> {
+        Ok(())
     }
 }
 
-async fn handle_crc32<W: AsyncWrite + Unpin, R: AsyncRead + Unpin>(
-    mut output: W,
-    input: R,
+fn handle_crc32<RW: Read + Write>(
+    mut read_writer: &mut RW,
     len: u64,
-) -> Result<(), Error> {
+) -> Result<(), std::io::Error> {
     let mut digest = crc::crc32::Digest::new(crc::crc32::IEEE);
-    let mut payload = input.take(len);
-    tokio::io::copy(&mut payload, &mut Hasher32AsyncWriter(&mut digest)).await?;
+    let mut payload = ReadWriteTake::new(&mut read_writer, len);
+    std::io::copy(&mut payload, &mut Hasher32Writer(&mut digest))?;
     let response = format!("{:x}\n", digest.sum32());
-    AsyncWriteExt::write_all(&mut output, response.as_bytes()).await?;
-    Ok(())
+    read_writer.write_all(response.as_bytes())
 }
 
 #[derive(Debug, PartialEq)]
@@ -56,6 +52,7 @@ enum Request {
 
 impl Request {
     pub fn parse(line_bytes: &[u8]) -> Option<Request> {
+        // println!("SERVER parsing {:?}", fixed_buffer::escape_ascii(line_bytes));
         let line = std::str::from_utf8(line_bytes).ok()?;
         let mut parts = line.splitn(2, " ");
         let method = parts.next().unwrap();
@@ -75,74 +72,56 @@ impl Request {
     }
 }
 
-async fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), Error> {
+fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), std::io::Error> {
     println!("SERVER handling connection");
-    let (mut input, mut output) = tcp_stream.split();
     let mut buf: FixedBuf<[u8; 4096]> = FixedBuf::new([0; 4096]);
     loop {
-        let line_bytes = match buf.read_delimited(&mut input, b"\n").await? {
+        let line_bytes = match buf.read_frame(&mut tcp_stream, fixed_buffer::deframe_line)? {
             Some(line_bytes) => line_bytes,
             None => return Ok(()),
         };
         match Request::parse(line_bytes) {
-            Some(Request::Hello) => handle_hello(&mut output).await?,
+            Some(Request::Hello) => handle_hello(&mut tcp_stream)?,
             Some(Request::Crc32(len)) => {
-                let payload_reader = tokio::io::AsyncReadExt::chain(&mut buf, &mut input);
-                handle_crc32(&mut output, payload_reader, len).await?
+                let mut read_writer = ReadWriteChain::new(&mut buf, &mut tcp_stream);
+                handle_crc32(&mut read_writer, len)?
             }
-            _ => AsyncWriteExt::write_all(&mut output, "ERROR\n".as_bytes()).await?,
+            _ => tcp_stream.write_all("ERROR\n".as_bytes())?,
         };
     }
 }
 
-#[tokio::main]
-pub async fn main() -> Result<(), Error> {
-    let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
-        .await
-        .unwrap();
+pub fn main() -> Result<(), std::io::Error> {
+    let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0))).unwrap();
     let addr = listener.local_addr().unwrap();
     println!("SERVER listening on {}", addr);
-    tokio::spawn(async move {
-        loop {
-            match listener.accept().await {
-                Ok((tcp_stream, _addr)) => {
-                    tokio::spawn(async move {
-                        if let Err(e) = handle_conn(tcp_stream).await {
-                            if e.kind() != ErrorKind::NotFound {
-                                println!("SERVER error: {:?}", e);
-                            }
+    std::thread::spawn(move || loop {
+        match listener.accept() {
+            Ok((tcp_stream, _addr)) => {
+                std::thread::spawn(move || {
+                    if let Err(e) = handle_conn(tcp_stream) {
+                        if e.kind() != ErrorKind::NotFound {
+                            println!("SERVER error: {:?}", e);
                         }
-                    });
-                }
-                Err(e) => {
-                    println!("SERVER error accepting connection: {:?}", e);
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                }
+                    }
+                });
+            }
+            Err(e) => {
+                println!("SERVER error accepting connection: {:?}", e);
+                std::thread::sleep(Duration::from_secs(1));
             }
         }
     });
 
     println!("CLIENT connecting");
-    let mut tcp_stream = TcpStream::connect(addr).await.unwrap();
+    let mut tcp_stream = TcpStream::connect(addr).unwrap();
     println!("CLIENT sending two requests at the same time: CRC('aaaa') and HELLO");
-    AsyncWriteExt::write_all(&mut tcp_stream, b"CRC32 4\naaaaHELLO\n")
-        .await
-        .unwrap();
+    tcp_stream.write_all(b"CRC32 4\naaaaHELLO\n").unwrap();
     let mut response = String::new();
-    tcp_stream.shutdown(std::net::Shutdown::Write).unwrap();
-    AsyncReadExt::read_to_string(&mut tcp_stream, &mut response)
-        .await
-        .unwrap();
+    tcp_stream.shutdown(Shutdown::Write).unwrap();
+    tcp_stream.read_to_string(&mut response).unwrap();
     for line in response.lines() {
         println!("CLIENT got response {:?}", line);
     }
     Ok(())
 }
-
-// $ cargo run --package fixed-buffer --example server
-// SERVER listening on 127.0.0.1:61779
-// CLIENT connecting
-// CLIENT sending requests
-// SERVER handling connection
-// CLIENT got response "ad98e545"
-// CLIENT got response "HI"

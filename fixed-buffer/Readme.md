@@ -1,55 +1,81 @@
 # fixed-buffer
 
-This is a Rust library with fixed-size buffers, useful for network protocol parsers.
+This is a Rust library with fixed-size buffers,
+useful for network protocol parsers and file parsers.
 
 ## Features
 - Write bytes to the buffer and read them back
 - Lives on the stack
 - Does not allocate memory
-- Supports tokio's AsyncRead and AsyncWrite
-- Use it to read a stream, search for a delimiter, and save leftover bytes for the next read.
+- Use it to read a stream, search for a delimiter,
+  and save leftover bytes for the next read.
 - Easy to learn & use.  Easy to maintain code that uses it.
 - Works with Rust `latest`, `beta`, and `nightly`
 - No macros
+- [fixed_buffer_tokio](https://crates.io/crates/fixed-buffer-tokio)
+  provides AsyncRead and AsyncWrite
 
 ## Limitations
 - Not a circular buffer.
-  You can call `shift()` periodically to move unread bytes to the front of the buffer.
+  You can call `shift()` periodically
+  to move unread bytes to the front of the buffer.
 - There is no `iterate_delimited(AsyncRead)`.
-  Because of borrowing rules, such a function would need to return non-borrowed (allocated and copied) data.
+  Because of borrowing rules, such a function would need to return
+  non-borrowed (allocated and copied) data.
+
+## Documentation
+https://docs.rs/fixed-buffer
 
 ## Examples
-TODO(mleonhard) Remove tokio from examples.
 Read and handle requests from a remote client:
 ```rust
-use fixed_buffer::FixedBuf;
-use std::io::Error;
-use tokio::io::AsyncWriteExt;
-use tokio::net::TcpStream;
+use fixed_buffer::{
+    FixedBuf, LINE_BLOCK_SIZER, ReadWriteChain};
+use std::io::{Error, Read, Write};
+use std::net::TcpStream;
 
-async fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), Error> {
-    let (mut input, mut output) = tcp_stream.split();
-    let mut buf: FixedBuf<[u8; 4096]> = FixedBuf::new([0; 4096]);
+fn handle_request<RW: Read + Write>(
+    reader_writer: &mut RW,
+    request: Request,
+) -> Result<(), Error> {
+    // ...
+    Ok(())
+}
+
+fn handle_conn(mut tcp_stream: TcpStream
+) -> Result<(), Error> {
+    let mut buf: FixedBuf<[u8; 4096]> =
+        FixedBuf::new([0; 4096]);
     loop {
-        // Read a line and leave leftover bytes in `buf`.
-        let line_bytes = match buf.read_delimited(&mut input, b"\n").await? {
-            Some(line_bytes) => line_bytes,
-            None => return Ok(()),
-        };
+        // Read a line
+        // and leave leftover bytes in `buf`.
+        let line_bytes = match buf.read_block(
+            &mut tcp_stream, &LINE_BLOCK_SIZER)? {
+                Some(line_bytes) => line_bytes,
+                None => return Ok(()),
+            };
         let request = Request::parse(line_bytes)?;
-        // Read any request payload from `buf` + `TcpStream`.
-        let payload_reader = tokio::io::AsyncReadExt::chain(&mut buf, &mut input);
-        handle_request(&mut output, payload_reader, request).await?;
+        // Read any request payload
+        // from `buf` + `TcpStream`.
+        let mut reader_writer = ReadWriteChain::new(
+            &mut buf, &mut tcp_stream);
+        handle_request(&mut reader_writer, request)?;
     }
 }
 ```
-For a runnable example, see [examples/server.rs](examples/server.rs).
+For a runnable example, see
+[`examples/server.rs`](https://gitlab.com/leonhard-llc/fixed-buffer-rs/-/blob/main/fixed-buffer/examples/server.rs).
 
 Read and process records:
 ```rust
+use fixed_buffer::{
+    FixedBuf, LINE_BLOCK_SIZER, ReadWriteChain};
+use std::io::{Error, ErrorKind, Read};
+use std::net::TcpStream;
+
 fn try_process_record(b: &[u8]) -> Result<usize, Error> {
     if b.len() < 2 {
-        return Ok(0)
+        return Ok(0);
     }
     if b.starts_with("ab".as_bytes()) {
         println!("found record");
@@ -59,40 +85,38 @@ fn try_process_record(b: &[u8]) -> Result<usize, Error> {
     }
 }
 
-async fn read_and_process<R: tokio::io::AsyncRead + Unpin>(mut input: R)
+fn read_and_process<R: Read>(mut input: R)
     -> Result<(), Error> {
-    let mut buf: FixedBuf<[u8; 1024]> = FixedBuf::new([0; 1024]);
+    let mut buf: FixedBuf<[u8; 1024]> =
+        FixedBuf::new([0; 1024]);
     loop {
         // Read a chunk into the buffer.
-        let mut writable = buf.writable()
-            .ok_or(Error::new(ErrorKind::InvalidData, "record too long, buffer full"))?;
-        let bytes_written = AsyncReadExt::read(&mut input, &mut writable).await?;
-        if bytes_written == 0 {
+        if buf.copy_once_from(&mut input)? == 0 {
             return if buf.len() == 0 {
-                Ok(())  // EOF at record boundary
+                // EOF at record boundary
+                Ok(())
             } else {
                 // EOF in the middle of a record
-                Err(Error::from(ErrorKind::UnexpectedEof))
+                Err(Error::from(
+                    ErrorKind::UnexpectedEof))
             };
         }
-        buf.wrote(bytes_written);
-
         // Process records in the buffer.
         loop {
-            let bytes_read = try_process_record(buf.readable())?;
+            let bytes_read =
+                try_process_record(buf.readable())?;
             if bytes_read == 0 {
                 break;
             }
             buf.read_bytes(bytes_read);
         }
-        // Shift data in the buffer to free up space at the end for writing.
+        // Shift data in the buffer to free up
+        // space at the end for writing.
         buf.shift();
     }
 }
+#
 ```
-
-## Documentation
-https://docs.rs/fixed-buffer
 
 The [`filled`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.filled)
 constructor is useful in tests.

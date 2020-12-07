@@ -1,53 +1,87 @@
-//! This is a Rust library with fixed-size buffers, useful for network protocol parsers.
+//! This is a Rust library with fixed-size buffers,
+//! useful for network protocol parsers and file parsers.
 //!
 //! # Features
+//! - No `unsafe`
+//! - Depends only on `std`
 //! - Write bytes to the buffer and read them back
 //! - Lives on the stack
 //! - Does not allocate memory
-//! - Supports tokio's AsyncRead and AsyncWrite
-//! - Use it to read a stream, search for a delimiter, and save leftover bytes for the next read.
+//! - Use it to read a stream, search for a delimiter,
+//!   and save leftover bytes for the next read.
 //! - Easy to learn & use.  Easy to maintain code that uses it.
 //! - Works with Rust `latest`, `beta`, and `nightly`
 //! - No macros
+//! - [fixed_buffer_tokio](https://crates.io/crates/fixed-buffer-tokio)
+//!   provides AsyncRead and AsyncWrite
 //!
 //! # Limitations
 //! - Not a circular buffer.
-//!   You can call `shift()` periodically to move unread bytes to the front of the buffer.
+//!   You can call `shift()` periodically
+//!   to move unread bytes to the front of the buffer.
 //! - There is no `iterate_delimited(AsyncRead)`.
-//!   Because of borrowing rules, such a function would need to return non-borrowed (allocated and copied) data.
+//!   Because of borrowing rules, such a function would need to return
+//!   non-borrowed (allocated and copied) data.
+//!
+//! # Documentation
+//! https://docs.rs/fixed-buffer
 //!
 //! # Examples
-//! TODO(mleonhard) Remove tokio from examples.
 //! Read and handle requests from a remote client:
 //! ```rust
-//! use fixed_buffer::FixedBuf;
-//! use std::io::Error;
-//! use tokio::io::AsyncWriteExt;
-//! use tokio::net::TcpStream;
+//! # struct Request {}
+//! # impl Request {
+//! #     pub fn parse(line_bytes: &[u8]
+//! #     ) -> Result<Request, std::io::Error> {
+//! #         Ok(Request{})
+//! #     }
+//! # }
+//! use fixed_buffer::{
+//!     deframe_line, FixedBuf, ReadWriteChain};
+//! use std::io::{Error, Read, Write};
+//! use std::net::TcpStream;
 //!
-//! async fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), Error> {
-//!     let (mut input, mut output) = tcp_stream.split();
-//!     let mut buf: FixedBuf<[u8; 4096]> = FixedBuf::new([0; 4096]);
+//! fn handle_request<RW: Read + Write>(
+//!     reader_writer: &mut RW,
+//!     request: Request,
+//! ) -> Result<(), Error> {
+//!     // ...
+//!     Ok(())
+//! }
+//!
+//! fn handle_conn(mut tcp_stream: TcpStream
+//! ) -> Result<(), Error> {
+//!     let mut buf: FixedBuf<[u8; 4096]> =
+//!         FixedBuf::new([0; 4096]);
 //!     loop {
-//!         // Read a line and leave leftover bytes in `buf`.
-//!         let line_bytes = match buf.read_delimited(&mut input, b"\n").await? {
-//!             Some(line_bytes) => line_bytes,
-//!             None => return Ok(()),
-//!         };
+//!         // Read a line
+//!         // and leave leftover bytes in `buf`.
+//!         let line_bytes = match buf.read_frame(
+//!             &mut tcp_stream, deframe_line)? {
+//!                 Some(line_bytes) => line_bytes,
+//!                 None => return Ok(()),
+//!             };
 //!         let request = Request::parse(line_bytes)?;
-//!         // Read any request payload from `buf` + `TcpStream`.
-//!         let payload_reader = tokio::io::AsyncReadExt::chain(&mut buf, &mut input);
-//!         handle_request(&mut output, payload_reader, request).await?;
+//!         // Read any request payload
+//!         // from `buf` + `TcpStream`.
+//!         let mut reader_writer = ReadWriteChain::new(
+//!             &mut buf, &mut tcp_stream);
+//!         handle_request(&mut reader_writer, request)?;
 //!     }
 //! }
 //! ```
-//! For a runnable example, see [examples/server.rs](examples/server.rs).
+//! For a runnable example, see
+//! [`examples/server.rs`](https://gitlab.com/leonhard-llc/fixed-buffer-rs/-/blob/main/fixed-buffer/examples/server.rs).
 //!
 //! Read and process records:
 //! ```rust
+//! use fixed_buffer::FixedBuf;
+//! use std::io::{Error, ErrorKind, Read};
+//! use std::net::TcpStream;
+//!
 //! fn try_process_record(b: &[u8]) -> Result<usize, Error> {
 //!     if b.len() < 2 {
-//!         return Ok(0)
+//!         return Ok(0);
 //!     }
 //!     if b.starts_with("ab".as_bytes()) {
 //!         println!("found record");
@@ -57,40 +91,42 @@
 //!     }
 //! }
 //!
-//! async fn read_and_process<R: tokio::io::AsyncRead + Unpin>(mut input: R)
+//! fn read_and_process<R: Read>(mut input: R)
 //!     -> Result<(), Error> {
-//!     let mut buf: FixedBuf<[u8; 1024]> = FixedBuf::new([0; 1024]);
+//!     let mut buf: FixedBuf<[u8; 1024]> =
+//!         FixedBuf::new([0; 1024]);
 //!     loop {
 //!         // Read a chunk into the buffer.
-//!         let mut writable = buf.writable()
-//!             .ok_or(Error::new(ErrorKind::InvalidData, "record too long, buffer full"))?;
-//!         let bytes_written = AsyncReadExt::read(&mut input, &mut writable).await?;
-//!         if bytes_written == 0 {
+//!         if buf.copy_once_from(&mut input)? == 0 {
 //!             return if buf.len() == 0 {
-//!                 Ok(())  // EOF at record boundary
+//!                 // EOF at record boundary
+//!                 Ok(())
 //!             } else {
 //!                 // EOF in the middle of a record
-//!                 Err(Error::from(ErrorKind::UnexpectedEof))
+//!                 Err(Error::from(
+//!                     ErrorKind::UnexpectedEof))
 //!             };
 //!         }
-//!         buf.wrote(bytes_written);
-//!
 //!         // Process records in the buffer.
 //!         loop {
-//!             let bytes_read = try_process_record(buf.readable())?;
+//!             let bytes_read =
+//!                 try_process_record(buf.readable())?;
 //!             if bytes_read == 0 {
 //!                 break;
 //!             }
 //!             buf.read_bytes(bytes_read);
 //!         }
-//!         // Shift data in the buffer to free up space at the end for writing.
+//!         // Shift data in the buffer to free up
+//!         // space at the end for writing.
 //!         buf.shift();
 //!     }
 //! }
+//! #
+//! # fn main() {
+//! #     read_and_process(std::io::Cursor::new(b"abab")).unwrap();
+//! #     read_and_process(std::io::Cursor::new(b"ababc")).unwrap_err();
+//! # }
 //! ```
-//!
-//! # Documentation
-//! https://docs.rs/fixed-buffer
 //!
 //! The [`filled`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.filled)
 //! constructor is useful in tests.
@@ -109,6 +145,14 @@
 //! 1. Run `./release.sh`
 //!
 //! # Changelog
+//! - v0.2.0
+//!   - Move tokio support to [fixed_buffer_tokio](https://crates.io/crates/fixed-buffer-tokio).
+//!   - Add
+//!     [`copy_once_from`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.copy_once_from),
+//!     [`read_block`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.read_block),
+//!     [`ReadWriteChain`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.ReadWriteChain.html),
+//!     and
+//!     [`ReadWriteTake`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.ReadWriteTake.html).
 //! - v0.1.7 - Add [`FixedBuf::escape_ascii`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.escape_ascii).
 //! - v0.1.6 - Add [`filled`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.filled)
 //!   constructor.
@@ -143,22 +187,13 @@
 //!   - https://gitlab.com/mattdark/firebase-example/blob/master/.gitlab-ci.yml
 //!   - https://medium.com/astraol/optimizing-ci-cd-pipeline-for-rust-projects-gitlab-docker-98df64ae3bc4
 //!   - https://hub.docker.com/_/rust
-//! - DONE - Custom buffer length.
-//!   - https://crates.io/crates/generic-array
-//!   - https://crates.io/crates/block-buffer
-//!   - https://crates.io/crates/string-wrapper
 //! - DONE - Publish to creates.io
 //! - DONE - Read through https://crate-ci.github.io/index.html
 //! - DONE - Get a code review from an experienced rustacean
 //! - DONE - Add and update a changelog
 //!   - Update it manually
 //!   - https://crate-ci.github.io/release/changelog.html
-//! - Add features: std, tokio, async-std
-//! - Simplify `read_delimited()`
-//! - Make a more generic read_frame that takes a frame detector function.
-//!   Make `read_delimited` use that.
-//! - Implement FixedBuf::chain(AsyncRead) which buffers reads like [tokio::io::ReadBuf](https://docs.rs/tokio/0.3.0/tokio/io/struct.ReadBuf.html).
-//! - Fix FixedBuf rustdoc link to box_benchmark.
+//! - Implement async-std read & write traits
 //! - Switch to const generics once they are stable:
 //!   - https://github.com/rust-lang/rust/issues/44580
 //!   - https://stackoverflow.com/a/56543462
@@ -209,16 +244,167 @@ impl core::fmt::Display for NotEnoughSpaceError {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct MalformedInputError(String);
+
+// TODO(mleonhard) Test.
+/// Deframes lines that are terminated by either `b'\n'` or `b"\r\n"`.
+///
+/// See [`read_frame`](struct.FixedBuf.html#method.read_frame).
+pub fn deframe_line(
+    data: &[u8],
+) -> Result<Option<(core::ops::Range<usize>, usize)>, MalformedInputError> {
+    for n in 0..data.len() {
+        if data[n] == b'\n' {
+            let data_start_incl = 0;
+            let data_end_excl = if n > 0 && data[n - 1] == b'\r' {
+                n - 1
+            } else {
+                n
+            };
+            let block_len = n + 1;
+            return Ok(Some((data_start_incl..data_end_excl, block_len)));
+        }
+    }
+    Ok(None)
+}
+
+/// TODO(mleonhard) Test.
+/// Deframes lines that are terminated by `b"\r\n"`.
+/// Ignores solitary `b'\n'`.
+///
+/// See [`read_frame`](struct.FixedBuf.html#method.read_frame).
+pub fn deframe_crlf(
+    data: &[u8],
+) -> Result<Option<(core::ops::Range<usize>, usize)>, MalformedInputError> {
+    if data.len() > 1 {
+        for n in 1..data.len() {
+            if data[n - 1] == b'\r' && data[n] == b'\n' {
+                return Ok(Some((0..(n - 1), n + 1)));
+            }
+        }
+    }
+    Ok(None)
+}
+
+// TODO(mleonhard) Test.
+/// A wrapper for a pair of structs.
+/// The first implements [`Read`](https://doc.rust-lang.org/stable/std/io/trait.Read.html).
+/// The second implements
+/// [`Read`](https://doc.rust-lang.org/stable/std/io/trait.Read.html)+[`Write`](https://doc.rust-lang.org/stable/std/io/trait.Write.html).
+///
+/// Passes reads through to the Read.
+/// Once the Read returns EOF, passes reads to Read+Write.
+///
+/// Passes all writes through to the Read+Write.
+///
+/// This is like [`std::io::Chain`](https://doc.rust-lang.org/stable/std/io/struct.Chain.html)
+/// that passes through writes.
+/// This makes it usable with Read+Write objects like
+/// [`std::net::TcpStream`](https://doc.rust-lang.org/stable/std/net/struct.TcpStream.html)
+/// and [`rustls::Stream`](https://docs.rs/rustls/latest/rustls/struct.Stream.html).
+pub struct ReadWriteChain<'a, R: std::io::Read, RW: std::io::Read + std::io::Write> {
+    reader: Option<&'a mut R>,
+    read_writer: &'a mut RW,
+}
+impl<'a, R: std::io::Read, RW: std::io::Read + std::io::Write> ReadWriteChain<'a, R, RW> {
+    /// See [`ReadWriteChain`](struct.ReadWriteChain.html).
+    pub fn new(reader: &'a mut R, read_writer: &'a mut RW) -> ReadWriteChain<'a, R, RW> {
+        Self {
+            reader: Some(reader),
+            read_writer,
+        }
+    }
+}
+impl<'a, R: std::io::Read, RW: std::io::Read + std::io::Write> std::io::Read
+    for ReadWriteChain<'a, R, RW>
+{
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
+        if let Some(ref mut reader) = self.reader {
+            match reader.read(buf) {
+                Ok(0) => {
+                    // EOF
+                    self.reader = None;
+                }
+                Ok(num_read) => return Ok(num_read),
+                Err(e) => return Err(e),
+            }
+        }
+        self.read_writer.read(buf)
+    }
+}
+impl<'a, R: std::io::Read, RW: std::io::Read + std::io::Write> std::io::Write
+    for ReadWriteChain<'a, R, RW>
+{
+    fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
+        self.read_writer.write(buf)
+    }
+    fn flush(&mut self) -> Result<(), std::io::Error> {
+        self.read_writer.flush()
+    }
+}
+
+// TODO(mleonhard) Test.
+/// Wraps a struct that implements
+/// [`Read`](https://doc.rust-lang.org/stable/std/io/trait.Read.html)+[`Write`](https://doc.rust-lang.org/stable/std/io/trait.Write.html).
+/// Passes through reads and writes to the struct.
+/// Limits the number of bytes that can be read.
+///
+/// This is like [`std::io::Take`](https://doc.rust-lang.org/stable/std/io/struct.Take.html)
+/// that passes through writes.
+/// This makes it usable with Read+Write objects like
+/// [`std::net::TcpStream`](https://doc.rust-lang.org/stable/std/net/struct.TcpStream.html)
+/// and [`rustls::Stream`](https://docs.rs/rustls/latest/rustls/struct.Stream.html).
+pub struct ReadWriteTake<'a, RW: std::io::Read + std::io::Write> {
+    read_writer: &'a mut RW,
+    remaining_bytes: u64,
+}
+impl<'a, RW: std::io::Read + std::io::Write> ReadWriteTake<'a, RW> {
+    /// See [`ReadWriteTake`](struct.ReadWriteTake.html).
+    pub fn new(read_writer: &'a mut RW, len: u64) -> ReadWriteTake<'a, RW> {
+        Self {
+            read_writer,
+            remaining_bytes: len,
+        }
+    }
+}
+impl<'a, RW: std::io::Read + std::io::Write> std::io::Read for ReadWriteTake<'a, RW> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
+        if self.remaining_bytes == 0 {
+            return Ok(0);
+        }
+        let num_to_read = self.remaining_bytes.min(buf.len() as u64) as usize;
+        let mut dest = &mut buf[0..num_to_read];
+        match self.read_writer.read(&mut dest) {
+            Ok(num_read) => {
+                self.remaining_bytes -= num_read as u64;
+                Ok(num_read)
+            }
+            Err(e) => Err(e),
+        }
+    }
+}
+impl<'a, RW: std::io::Read + std::io::Write> std::io::Write for ReadWriteTake<'a, RW> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
+        self.read_writer.write(buf)
+    }
+    fn flush(&mut self) -> Result<(), std::io::Error> {
+        self.read_writer.flush()
+    }
+}
+
 /// FixedBuf is a fixed-length byte buffer.
 /// You can write bytes to it and then read them back.
 ///
 /// It is not a circular buffer.  Call [`shift`](#method.shift) periodically to
 /// move unread bytes to the front of the buffer.
 ///
-/// Use [`new`](#method.new) to create
-/// `FixedBuf<[u8; N]>`, `FixedBuf<Box<[u8]>>`, and `FixedBuf<&mut [u8]>` structs.
+/// Use [`new`](#method.new) to make structs:
+/// - `FixedBuf<[u8; N]>`
+/// - `FixedBuf<Box<[u8]>>`
+/// - `FixedBuf<&mut [u8]>`
 ///
-/// Note that `FixedBuf<Box<[u8]>>` uses less memory than `Box<FixedBuf<[u8; N]>>`.
+/// `FixedBuf<Box<[u8]>>` uses less memory than `Box<FixedBuf<[u8; N]>>`.
 /// See [`new`](#method.new) for details.
 #[derive(Default, Copy, Clone, Eq, Hash, PartialEq)]
 pub struct FixedBuf<T> {
@@ -423,70 +609,11 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
     /// [`tokio::io::AsyncReadExt::read`](https://docs.rs/tokio/0.3.0/tokio/io/trait.AsyncReadExt.html#method.reade)
     /// , implemented for FixedBuffer in
     /// [`fixed_buffer_tokio::AsyncReadExt`](https://docs.rs/fixed-buffer-tokio/latest/fixed_buffer_tokio/trait.AsyncReadExt.html).
-    ///
-    /// TODO(mleonhard) Remove tokio deps from example.
-    /// Example:
-    /// ```
-    /// # use fixed_buffer::FixedBuf;
-    /// # use std::io::{Error, ErrorKind};
-    /// # use tokio::io::AsyncReadExt;
-    /// fn try_process_record(b: &[u8]) -> Result<usize, Error> {
-    ///     if b.len() < 2 {
-    ///         return Ok(0);
-    ///     }
-    ///     if b.starts_with("ab".as_bytes()) {
-    ///         println!("found record");
-    ///         Ok(2)
-    ///     } else {
-    ///         Err(Error::new(ErrorKind::InvalidData, "bad record"))
-    ///     }
-    /// }
-    ///
-    /// async fn read_and_process<R: tokio::io::AsyncRead + Unpin>(mut input: R)
-    ///     -> Result<(), Error> {
-    ///     let mut buf: FixedBuf<[u8; 1024]> = FixedBuf::new([0; 1024]);
-    ///     loop {
-    ///         // Read a chunk into the buffer.
-    ///         let mut writable = buf.writable()
-    ///             .ok_or(Error::new(ErrorKind::InvalidData, "record too long, buffer full"))?;
-    ///         let bytes_written = AsyncReadExt::read(&mut input, &mut writable).await?;
-    ///         if bytes_written == 0 {
-    ///             return if buf.len() == 0 {
-    ///                 Ok(())  // EOF at record boundary
-    ///             } else {
-    ///                 // EOF in the middle of a record
-    ///                 Err(Error::from(ErrorKind::UnexpectedEof))
-    ///             };
-    ///         }
-    ///         buf.wrote(bytes_written);
-    ///
-    ///         // Process records in the buffer.
-    ///         loop {
-    ///             let bytes_read = try_process_record(buf.readable())?;
-    ///             if bytes_read == 0 {
-    ///                 break;
-    ///             }
-    ///             buf.read_bytes(bytes_read);
-    ///         }
-    ///         // Shift data in the buffer to free up space at the end for writing.
-    ///         buf.shift();
-    ///     }
-    /// }
-    ///
-    /// # tokio_test::block_on(async {
-    /// read_and_process(std::io::Cursor::new(b"")).await.unwrap();
-    /// read_and_process(std::io::Cursor::new(b"abab")).await.unwrap();
-    /// assert_eq!(
-    ///     std::io::ErrorKind::UnexpectedEof,
-    ///     read_and_process(std::io::Cursor::new(b"aba")).await.unwrap_err().kind()
-    /// );
-    /// # })
-    /// ```
     pub fn readable(&self) -> &[u8] {
         &self.mem.as_ref()[self.read_index..self.write_index]
     }
 
-    /// Read bytes from the buffer.
+    /// Reads bytes from the buffer.
     ///
     /// Panics if the buffer does not contain enough bytes.
     pub fn read_bytes(&mut self, num_bytes: usize) -> &[u8] {
@@ -504,13 +631,14 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
         &self.mem.as_ref()[old_read_index..new_read_index]
     }
 
-    /// Read all the bytes from the buffer.
+    /// Reads all the bytes from the buffer.
+    ///
     /// The buffer becomes empty and subsequent writes can fill the whole buffer.
     pub fn read_all(&mut self) -> &[u8] {
         self.read_bytes(self.len())
     }
 
-    /// Reads bytes from the buffer and copies them into `dest`.
+    /// Reads byte from the buffer and copies them into `dest`.
     ///
     /// Returns the number of bytes copied.
     ///
@@ -530,6 +658,24 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
 }
 
 impl<T: AsMut<[u8]>> FixedBuf<T> {
+    // TODO(mleonhard) Test.
+    /// Reads from `reader` once and writes the data into the buffer.
+    ///
+    /// Returns [`InvalidData`](std::io::ErrorKind::InvalidData)
+    /// if there is no empty space in the buffer.
+    /// See [`shift`](#method.shift).
+    pub fn copy_once_from<R: std::io::Read>(
+        &mut self,
+        reader: &mut R,
+    ) -> Result<usize, std::io::Error> {
+        let mut writable = self.writable().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "no empty space in buffer")
+        })?;
+        let num_read = reader.read(&mut writable)?;
+        self.wrote(num_read);
+        Ok(num_read)
+    }
+
     /// Writes `s` into the buffer, after any unread bytes.
     ///
     /// Returns [`Err`] if the buffer doesn't have enough free space at the end
@@ -554,11 +700,12 @@ impl<T: AsMut<[u8]>> FixedBuf<T> {
         self.write_bytes(s.as_bytes()).map(|_| ())
     }
 
-    /// Try to write `data` into the buffer, after any unread bytes.
+    /// Tries to write `data` into the buffer, after any unread bytes.
     ///
     /// Returns `Ok(data.len())` if it wrote all of the bytes.
     ///
-    /// Returns [`core::result::Result::Err`](https://doc.rust-lang.org/core/result/enum.Result.html#variant.Err)
+    /// Returns
+    /// [`core::result::Result::Err`](https://doc.rust-lang.org/core/result/enum.Result.html#variant.Err)
     /// if the buffer doesn't have enough free space at the end for all of the bytes.
     ///
     /// See [`shift`](#method.shift).
@@ -574,9 +721,7 @@ impl<T: AsMut<[u8]>> FixedBuf<T> {
     /// buf.write_bytes("9".as_bytes()).unwrap_err();  // Error, buffer is full.
     /// ```
     pub fn write_bytes(&mut self, data: &[u8]) -> core::result::Result<usize, NotEnoughSpaceError> {
-        let writable = self.writable().ok_or_else(|| {
-            NotEnoughSpaceError {}
-        })?;
+        let writable = self.writable().ok_or_else(|| NotEnoughSpaceError {})?;
         if writable.len() < data.len() {
             return Err(NotEnoughSpaceError {});
         }
@@ -622,7 +767,7 @@ impl<T: AsMut<[u8]>> FixedBuf<T> {
         Some(&mut self.mem.as_mut()[self.write_index..])
     }
 
-    /// Commit bytes into the buffer.
+    /// Commits bytes into the buffer.
     /// Call this after writing to the front of the
     /// [`writable`](#method.writable) slice.
     ///
@@ -630,7 +775,7 @@ impl<T: AsMut<[u8]>> FixedBuf<T> {
     ///
     /// Panics when there is not `num_bytes` free at the end of the buffer.
     ///
-    /// See example in [`writable()`](#method.writable).
+    /// See [`writable()`](#method.writable).
     pub fn wrote(&mut self, num_bytes: usize) {
         if num_bytes == 0 {
             return;
@@ -648,8 +793,6 @@ impl<T: AsMut<[u8]>> FixedBuf<T> {
     /// After you read bytes, the space at the beginning of the buffer is unused.
     /// Call this method to move unread data to the beginning of the buffer and recover the space.
     /// This makes the free space available for writes, which go at the end of the buffer.
-    ///
-    /// For an example, see [`readable`](#method.readable).
     pub fn shift(&mut self) {
         if self.read_index == 0 {
             return;
@@ -667,13 +810,140 @@ impl<T: AsMut<[u8]>> FixedBuf<T> {
     }
 }
 
+impl<T: AsRef<[u8]> + AsMut<[u8]>> FixedBuf<T> {
+    // TODO(mleonhard) Test.
+    /// Reads from `reader` into the buffer.
+    ///
+    /// After each read, calls `deframer_fn`
+    /// to check if the buffer now contains a complete frame.
+    /// Consumes the frame bytes from the buffer
+    /// and returns a slice with the frame contents.
+    ///
+    /// Returns `None` when `reader` reaches EOF and the buffer is empty.
+    ///
+    /// Returns [`UnexpectedEof`](std::io::ErrorKind::UnexpectedEof)
+    /// when `reader` reaches EOF and the buffer contains an incomplete frame.
+    ///
+    /// Returns [`InvalidData`](std::io::ErrorKind::InvalidData)
+    /// when `deframer_fn` returns an error or the buffer fills up.
+    ///
+    /// Calls [`shift`](#method.shift) before reading.
+    ///
+    /// Provided deframer functions:
+    /// - [deframe_line](https://docs.rs/fixed-buffer/latest/fixed_buffer/fn.deframe_line.html)
+    /// - [deframe_crlf](https://docs.rs/fixed-buffer/latest/fixed_buffer/fn.deframe_crlf.html)
+    ///
+    /// # Example
+    /// ```
+    /// # use fixed_buffer::{escape_ascii, FixedBuf, deframe_line};
+    /// let mut buf: FixedBuf<[u8; 32]> = FixedBuf::new([0u8; 32]);
+    /// let mut input = std::io::Cursor::new(b"aaa\r\nbbb\n\nccc\n");
+    /// assert_eq!("aaa", escape_ascii(buf.read_frame(&mut input, deframe_line).unwrap().unwrap()));
+    /// assert_eq!("bbb", escape_ascii(buf.read_frame(&mut input, deframe_line).unwrap().unwrap()));
+    /// assert_eq!("", escape_ascii(buf.read_frame(&mut input, deframe_line).unwrap().unwrap()));
+    /// assert_eq!("ccc", escape_ascii(buf.read_frame(&mut input, deframe_line).unwrap().unwrap()));
+    /// assert_eq!(None, buf.read_frame(&mut input, deframe_line).unwrap());
+    /// ```
+    ///
+    /// # Deframer Function `deframe_fn`
+    /// Checks if `data` contains an entire frame.
+    ///
+    /// Never panics.
+    ///
+    /// Returns `Err(MalformedInputError)` if `data` contains a malformed frame.
+    ///
+    /// Returns `Ok(None)` if `data` contains an incomplete frame.
+    /// The caller will read more data and call `deframe` again.
+    ///
+    /// Returns `Ok((range, len))` when `data` contains a complete well-formed
+    /// frame of length `len` and contents `&data[range]`.
+    ///
+    /// A frame is a sequence of bytes containing a payload
+    /// and metadata prefix or suffix bytes.
+    /// The metadata define where the payload starts and ends.
+    /// Popular frame protocols include line-delimiting
+    /// ([CSV](https://en.wikipedia.org/wiki/Comma-separated_values)),
+    /// hexadecimal length prefix
+    /// ([HTTP chunked transfer encoding](https://tools.ietf.org/html/rfc7230#section-4.1)),
+    /// and binary length prefix
+    /// ([TLS](https://tools.ietf.org/html/rfc5246#section-6.2.1)).
+    ///
+    /// If the caller removes `len` bytes from the front of `data`, then
+    /// `data` should start with the next frame, ready to call `deframe` again.
+    ///
+    /// A line-delimited deframer returns `range`
+    /// so that `&data[range]` contains the entire line without the
+    /// final `b'\n'` or `b"\r\n"`.
+    /// It returns `len` that counts the bytes of
+    /// the entire line and the final `b'\n'` or `b"\r\n"`.
+    ///
+    /// # Example
+    /// A CRLF-terminated line deframer:
+    /// ```
+    /// # use fixed_buffer::deframe_crlf;
+    /// assert_eq!(Ok(None), deframe_crlf(b""));
+    /// assert_eq!(Ok(None), deframe_crlf(b"abc"));
+    /// assert_eq!(Ok(None), deframe_crlf(b"abc\r"));
+    /// assert_eq!(Ok(None), deframe_crlf(b"abc\n"));
+    /// assert_eq!(Ok(Some((0..3, 5))), deframe_crlf(b"abc\r\n"));
+    /// assert_eq!(Ok(Some((0..3, 5))), deframe_crlf(b"abc\r\nX"));
+    /// ```
+    pub fn read_frame<R, F>(
+        &mut self,
+        reader: &mut R,
+        deframer_fn: F,
+    ) -> Result<Option<&[u8]>, std::io::Error>
+    where
+        R: std::io::Read,
+        F: Fn(&[u8]) -> Result<Option<(core::ops::Range<usize>, usize)>, MalformedInputError>,
+    {
+        loop {
+            if !self.is_empty() {
+                match deframer_fn(self.readable()) {
+                    Err(e) => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("{:?}", e),
+                        ))
+                    }
+                    Ok(Some((data_range, block_len))) => {
+                        let mem_start = self.read_index + data_range.start;
+                        let mem_end = self.read_index + data_range.end;
+                        self.read_bytes(block_len);
+                        return Ok(Some(&self.mem.as_ref()[mem_start..mem_end]));
+                    }
+                    Ok(None) => {}
+                }
+            }
+            self.shift();
+            let writable = self.writable().ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, "end of buffer full")
+            })?;
+            let num_read = reader.read(writable)?;
+            if num_read == 0 {
+                if self.is_empty() {
+                    return Ok(None);
+                }
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "eof after reading part of a frame",
+                ));
+            }
+            self.wrote(num_read);
+        }
+    }
+}
+
 impl<T> Unpin for FixedBuf<T> {}
 
 impl<T: AsMut<[u8]>> std::io::Write for FixedBuf<T> {
     fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
-        self.write_bytes(data).map_err(|_|
-            std::io::Error::new(std::io::ErrorKind::InvalidData, "not enough space in buffer")
-        )
+        self.write_bytes(data).map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "not enough space in buffer",
+            )
+        })
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
