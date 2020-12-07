@@ -252,6 +252,8 @@ pub struct FixedBuf<T> {
     write_index: usize,
 }
 
+impl<T> Unpin for FixedBuf<T> {}
+
 impl<T> FixedBuf<T> {
     /// Makes a new empty buffer, consuming or borrowing `mem`
     /// and using it as the internal memory array.
@@ -772,8 +774,6 @@ impl<T: AsRef<[u8]> + AsMut<[u8]>> FixedBuf<T> {
         }
     }
 }
-
-impl<T> Unpin for FixedBuf<T> {}
 
 impl<T: AsMut<[u8]>> std::io::Write for FixedBuf<T> {
     fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
