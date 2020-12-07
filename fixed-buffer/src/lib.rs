@@ -497,7 +497,6 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
 }
 
 impl<T: AsMut<[u8]>> FixedBuf<T> {
-    // TODO(mleonhard) Test.
     /// Reads from `reader` once and writes the data into the buffer.
     ///
     /// Returns [`InvalidData`](std::io::ErrorKind::InvalidData)
@@ -1015,6 +1014,67 @@ mod tests {
         buf.write_str("def").unwrap();
         assert_eq!("def", escape_ascii(buf.read_all()));
         assert_eq!("", escape_ascii(buf.read_all()));
+    }
+
+    #[test]
+    fn test_copy_once_from() {
+        let mut buf: FixedBuf<[u8; 4]> = FixedBuf::default();
+
+        // Appends existing data.
+        buf.write_str("a").unwrap();
+        assert_eq!(
+            2,
+            buf.copy_once_from(&mut std::io::Cursor::new(b"12"))
+                .unwrap()
+        );
+        assert_eq!("a12", escape_ascii(buf.read_all()));
+
+        // EOF, doesn't fill buffer.
+        assert_eq!(
+            3,
+            buf.copy_once_from(&mut std::io::Cursor::new(b"123"))
+                .unwrap()
+        );
+        assert_eq!("123", escape_ascii(buf.read_all()));
+
+        // EOF, fills buffer.
+        assert_eq!(
+            4,
+            buf.copy_once_from(&mut std::io::Cursor::new(b"1234"))
+                .unwrap()
+        );
+        assert_eq!("1234", escape_ascii(buf.read_all()));
+
+        // Fills buffer.
+        assert_eq!(
+            4,
+            buf.copy_once_from(&mut std::io::Cursor::new(b"12345"))
+                .unwrap()
+        );
+        assert_eq!("1234", escape_ascii(buf.read_all()));
+
+        // Buffer already full
+        buf.write_str("abcd").unwrap();
+        assert_eq!(
+            std::io::ErrorKind::InvalidData,
+            buf.copy_once_from(&mut std::io::Cursor::new(b"1"))
+                .unwrap_err()
+                .kind()
+        );
+        assert_eq!("abcd", escape_ascii(buf.read_all()));
+
+        // Reads only once.
+        struct SingleRead(bool);
+        impl std::io::Read for SingleRead {
+            fn read(&mut self, mut buf: &mut [u8]) -> Result<usize, std::io::Error> {
+                if self.0 {
+                    panic!("read twice");
+                }
+                std::io::Write::write(&mut buf, b"12")
+            }
+        }
+        assert_eq!(2, buf.copy_once_from(&mut SingleRead(false)).unwrap());
+        assert_eq!("12", escape_ascii(buf.read_all()));
     }
 
     #[test]
