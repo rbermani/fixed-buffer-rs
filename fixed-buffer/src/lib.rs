@@ -1,6 +1,8 @@
 //! This is a Rust library with fixed-size buffers,
 //! useful for network protocol parsers and file parsers.
 //!
+//! [![unsafe forbidden](https://gitlab.com/leonhard-llc/fixed-buffer-rs/-/raw/main/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
+//!
 //! # Features
 //! - No `unsafe`
 //! - Depends only on `std`
