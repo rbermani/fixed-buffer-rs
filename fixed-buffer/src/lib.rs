@@ -651,7 +651,6 @@ impl<T: AsMut<[u8]>> FixedBuf<T> {
 }
 
 impl<T: AsRef<[u8]> + AsMut<[u8]>> FixedBuf<T> {
-    // TODO(mleonhard) Test.
     /// Reads from `reader` into the buffer.
     ///
     /// After each read, calls `deframer_fn`
@@ -1026,6 +1025,192 @@ mod tests {
         buf.shift();
         buf.write_str("efgh").unwrap();
         assert_eq!("efgh", escape_ascii(buf.readable()));
+    }
+
+    fn deframe_line_reject_xs(
+        data: &[u8],
+    ) -> Result<Option<(core::ops::Range<usize>, usize)>, MalformedInputError> {
+        if data.contains(&b'x') || data.contains(&b'X') {
+            return Err(MalformedInputError(String::from("err1")));
+        }
+        deframe_line(data)
+    }
+
+    #[test]
+    fn test_read_frame_empty_to_eof() {
+        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        let mut reader = std::io::Cursor::new(b"");
+        assert_eq!(
+            None,
+            buf.read_frame(&mut reader, deframe_line_reject_xs).unwrap()
+        );
+        assert_eq!("", escape_ascii(buf.readable()));
+    }
+
+    #[test]
+    fn test_read_frame_empty_to_incomplete() {
+        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        let mut reader = std::io::Cursor::new(b"abc");
+        assert_eq!(
+            std::io::ErrorKind::UnexpectedEof,
+            buf.read_frame(&mut reader, deframe_line_reject_xs)
+                .unwrap_err()
+                .kind()
+        );
+        assert_eq!("abc", escape_ascii(buf.readable()));
+    }
+
+    #[test]
+    fn test_read_frame_empty_to_complete() {
+        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        let mut reader = std::io::Cursor::new(b"abc\n");
+        assert_eq!(
+            "abc",
+            escape_ascii(
+                buf.read_frame(&mut reader, deframe_line_reject_xs)
+                    .unwrap()
+                    .unwrap()
+            )
+        );
+        assert_eq!("", escape_ascii(buf.readable()));
+    }
+
+    #[test]
+    fn test_read_frame_empty_to_complete_with_leftover() {
+        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        let mut reader = std::io::Cursor::new(b"abc\nde");
+        assert_eq!(
+            "abc",
+            escape_ascii(
+                buf.read_frame(&mut reader, deframe_line_reject_xs)
+                    .unwrap()
+                    .unwrap()
+            )
+        );
+        assert_eq!("de", escape_ascii(buf.readable()));
+    }
+
+    #[test]
+    fn test_read_frame_empty_to_invalid() {
+        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        let mut reader = std::io::Cursor::new(b"x");
+        assert_eq!(
+            std::io::ErrorKind::InvalidData,
+            buf.read_frame(&mut reader, deframe_line_reject_xs)
+                .unwrap_err()
+                .kind()
+        );
+        assert_eq!("x", escape_ascii(buf.readable()));
+    }
+
+    #[test]
+    fn test_read_frame_incomplete_to_eof() {
+        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        buf.write_str("a").unwrap();
+        let mut reader = std::io::Cursor::new(b"");
+        assert_eq!(
+            std::io::ErrorKind::UnexpectedEof,
+            buf.read_frame(&mut reader, deframe_line_reject_xs)
+                .unwrap_err()
+                .kind()
+        );
+        assert_eq!("a", escape_ascii(buf.readable()));
+    }
+
+    #[test]
+    fn test_read_frame_incomplete_to_incomplete() {
+        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        buf.write_str("a").unwrap();
+        let mut reader = std::io::Cursor::new(b"bc");
+        assert_eq!(
+            std::io::ErrorKind::UnexpectedEof,
+            buf.read_frame(&mut reader, deframe_line_reject_xs)
+                .unwrap_err()
+                .kind()
+        );
+        assert_eq!("abc", escape_ascii(buf.readable()));
+    }
+
+    #[test]
+    fn test_read_frame_incomplete_to_complete() {
+        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        buf.write_str("a").unwrap();
+        let mut reader = std::io::Cursor::new(b"bc\n");
+        assert_eq!(
+            "abc",
+            escape_ascii(
+                buf.read_frame(&mut reader, deframe_line_reject_xs)
+                    .unwrap()
+                    .unwrap()
+            )
+        );
+        assert_eq!("", escape_ascii(buf.readable()));
+    }
+
+    #[test]
+    fn test_read_frame_incomplete_to_complete_with_leftover() {
+        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        buf.write_str("a").unwrap();
+        let mut reader = std::io::Cursor::new(b"bc\nde");
+        assert_eq!(
+            "abc",
+            escape_ascii(
+                buf.read_frame(&mut reader, deframe_line_reject_xs)
+                    .unwrap()
+                    .unwrap()
+            )
+        );
+        assert_eq!("de", escape_ascii(buf.readable()));
+    }
+
+    struct PanickingRead {}
+    impl std::io::Read for PanickingRead {
+        fn read(&mut self, _buf: &mut [u8]) -> Result<usize, std::io::Error> {
+            panic!("PanickingRead read");
+        }
+    }
+
+    #[test]
+    fn test_read_frame_complete_doesnt_read() {
+        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        buf.write_str("abc\n").unwrap();
+        assert_eq!(
+            "abc",
+            escape_ascii(
+                buf.read_frame(&mut PanickingRead {}, deframe_line_reject_xs)
+                    .unwrap()
+                    .unwrap()
+            )
+        );
+        assert_eq!("", escape_ascii(buf.readable()));
+    }
+
+    #[test]
+    fn test_read_frame_complete_leaves_leftovers() {
+        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        buf.write_str("abc\nde").unwrap();
+        assert_eq!(
+            "abc",
+            escape_ascii(
+                buf.read_frame(&mut PanickingRead {}, deframe_line_reject_xs)
+                    .unwrap()
+                    .unwrap()
+            )
+        );
+        assert_eq!("de", escape_ascii(buf.readable()));
+    }
+
+    #[test]
+    fn test_read_frame_invalid_doesnt_read() {
+        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        buf.write_str("x").unwrap();
+        assert_eq!(
+            std::io::ErrorKind::InvalidData,
+            buf.read_frame(&mut PanickingRead {}, deframe_line_reject_xs)
+                .unwrap_err()
+                .kind()
+        );
+        assert_eq!("x", escape_ascii(buf.readable()));
     }
 
     #[test]
