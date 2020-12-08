@@ -1221,6 +1221,20 @@ mod tests {
     }
 
     #[test]
+    fn test_read_frame_buffer_full() {
+        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        buf.write_str("abcdefgh").unwrap();
+        let mut reader = std::io::Cursor::new(b"bc\nde");
+        assert_eq!(
+            std::io::ErrorKind::InvalidData,
+            buf.read_frame(&mut reader, deframe_line_reject_xs)
+                .unwrap_err()
+                .kind()
+        );
+        assert_eq!("abcdefgh", escape_ascii(buf.readable()));
+    }
+
+    #[test]
     fn test_readable_and_read() {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
         assert_eq!("", escape_ascii(buf.readable()));
