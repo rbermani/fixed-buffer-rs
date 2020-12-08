@@ -14,7 +14,7 @@
 //! - Easy to learn & use.  Easy to maintain code that uses it.
 //! - Works with Rust `latest`, `beta`, and `nightly`
 //! - No macros
-//! - Good test coverage (98%)
+//! - Good test coverage (99%)
 //! - [fixed_buffer_tokio](https://crates.io/crates/fixed-buffer-tokio)
 //!   provides AsyncRead and AsyncWrite
 //!
