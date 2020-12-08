@@ -138,6 +138,14 @@ constructor is useful in tests.
 1. Run `./release.sh`
 
 ## Changelog
+- v0.2.0
+  - Move tokio support to [fixed_buffer_tokio](https://crates.io/crates/fixed-buffer-tokio).
+  - Add
+    [`copy_once_from`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.copy_once_from),
+    [`read_block`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.read_block),
+    [`ReadWriteChain`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.ReadWriteChain.html),
+    and
+    [`ReadWriteTake`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.ReadWriteTake.html).
 - v0.1.7 - Add [`FixedBuf::escape_ascii`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.escape_ascii).
 - v0.1.6 - Add [`filled`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.filled)
   constructor.
