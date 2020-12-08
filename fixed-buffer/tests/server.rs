@@ -1,13 +1,17 @@
 //! Example server that uses `fixed_buffer` crate to parse a simple line-based protocol.
 //!
 //! ```
-//! $ cargo run --package fixed-buffer --example server
-//! SERVER listening on 127.0.0.1:65012
+//! $ cargo test --package fixed-buffer --test server -- --nocapture
+//! running 1 test
+//! SERVER listening on 127.0.0.1:49379
 //! CLIENT connecting
 //! CLIENT sending two requests at the same time: CRC('aaaa') and HELLO
 //! SERVER handling connection
 //! CLIENT got response "ad98e545"
 //! CLIENT got response "HI"
+//! test main ... ok
+//!
+//! test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
 //! ```
 #![forbid(unsafe_code)]
 
@@ -91,7 +95,8 @@ fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), std::io::Error> {
     }
 }
 
-pub fn main() -> Result<(), std::io::Error> {
+#[test]
+pub fn main() {
     let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0))).unwrap();
     let addr = listener.local_addr().unwrap();
     println!("SERVER listening on {}", addr);
@@ -123,5 +128,4 @@ pub fn main() -> Result<(), std::io::Error> {
     for line in response.lines() {
         println!("CLIENT got response {:?}", line);
     }
-    Ok(())
 }

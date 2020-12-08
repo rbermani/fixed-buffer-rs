@@ -72,8 +72,8 @@
 //!     }
 //! }
 //! ```
-//! For a runnable example, see
-//! [`examples/server.rs`](https://gitlab.com/leonhard-llc/fixed-buffer-rs/-/blob/main/fixed-buffer/examples/server.rs).
+//! For a complete example, see
+//! [`tests/server.rs`](https://gitlab.com/leonhard-llc/fixed-buffer-rs/-/blob/main/fixed-buffer/tests/server.rs).
 //!
 //! Read and process records:
 //! ```rust
@@ -209,8 +209,6 @@
 //!   - RISCV & ESP32 firmware?
 #![forbid(unsafe_code)]
 
-// TODO(mleonhard) Add integration tests.
-
 mod escape_ascii;
 pub use escape_ascii::escape_ascii;
 
@@ -310,7 +308,7 @@ impl<T> FixedBuf<T> {
     /// This is because `Box<[u8; 128]>` uses exactly 128-bytes on the heap.
     ///
     /// Run the program
-    /// [`examples/main.rs`](https://gitlab.com/leonhard-llc/fixed-buffer-rs/-/blob/main/fixed-buffer/examples/box_benchmark.rs)
+    /// [`box_benchmark/box_benchmark.rs`](https://gitlab.com/leonhard-llc/fixed-buffer-rs/-/blob/main/fixed-buffer/box_benchmark/box_benchmark.rs)
     /// to see the memory usage difference.
     pub const fn new(mem: T) -> Self {
         Self {

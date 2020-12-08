@@ -3,8 +3,11 @@
 This is a Rust library with fixed-size buffers,
 useful for network protocol parsers and file parsers.
 
+[![unsafe forbidden](https://gitlab.com/leonhard-llc/fixed-buffer-rs/-/raw/main/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
+
 ## Features
-- [![unsafe forbidden](https://gitlab.com/leonhard-llc/fixed-buffer-rs/-/raw/main/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
+- No `unsafe`
+- Depends only on `std`
 - Write bytes to the buffer and read them back
 - Lives on the stack
 - Does not allocate memory
@@ -31,7 +34,7 @@ https://docs.rs/fixed-buffer
 Read and handle requests from a remote client:
 ```rust
 use fixed_buffer::{
-    FixedBuf, LINE_BLOCK_SIZER, ReadWriteChain};
+    deframe_line, FixedBuf, ReadWriteChain};
 use std::io::{Error, Read, Write};
 use std::net::TcpStream;
 
@@ -50,8 +53,8 @@ fn handle_conn(mut tcp_stream: TcpStream
     loop {
         // Read a line
         // and leave leftover bytes in `buf`.
-        let line_bytes = match buf.read_block(
-            &mut tcp_stream, &LINE_BLOCK_SIZER)? {
+        let line_bytes = match buf.read_frame(
+            &mut tcp_stream, deframe_line)? {
                 Some(line_bytes) => line_bytes,
                 None => return Ok(()),
             };
@@ -64,13 +67,12 @@ fn handle_conn(mut tcp_stream: TcpStream
     }
 }
 ```
-For a runnable example, see
-[`examples/server.rs`](https://gitlab.com/leonhard-llc/fixed-buffer-rs/-/blob/main/fixed-buffer/examples/server.rs).
+For a complete example, see
+[`tests/server.rs`](https://gitlab.com/leonhard-llc/fixed-buffer-rs/-/blob/main/fixed-buffer/tests/server.rs).
 
 Read and process records:
 ```rust
-use fixed_buffer::{
-    FixedBuf, LINE_BLOCK_SIZER, ReadWriteChain};
+use fixed_buffer::FixedBuf;
 use std::io::{Error, ErrorKind, Read};
 use std::net::TcpStream;
 
@@ -170,22 +172,13 @@ constructor is useful in tests.
   - https://gitlab.com/mattdark/firebase-example/blob/master/.gitlab-ci.yml
   - https://medium.com/astraol/optimizing-ci-cd-pipeline-for-rust-projects-gitlab-docker-98df64ae3bc4
   - https://hub.docker.com/_/rust
-- DONE - Custom buffer length.
-  - https://crates.io/crates/generic-array
-  - https://crates.io/crates/block-buffer
-  - https://crates.io/crates/string-wrapper
 - DONE - Publish to creates.io
 - DONE - Read through https://crate-ci.github.io/index.html
 - DONE - Get a code review from an experienced rustacean
 - DONE - Add and update a changelog
   - Update it manually
   - https://crate-ci.github.io/release/changelog.html
-- Add features: std, tokio, async-std
-- Simplify `read_delimited()`
-- Make a more generic read_frame that takes a frame detector function.
-  Make `read_delimited` use that.
-- Implement FixedBuf::chain(AsyncRead) which buffers reads like [tokio::io::ReadBuf](https://docs.rs/tokio/0.3.0/tokio/io/struct.ReadBuf.html).
-- Fix FixedBuf rustdoc link to box_benchmark.
+- Implement async-std read & write traits
 - Switch to const generics once they are stable:
   - https://github.com/rust-lang/rust/issues/44580
   - https://stackoverflow.com/a/56543462
