@@ -635,11 +635,13 @@ impl<T: AsMut<[u8]>> FixedBuf<T> {
         if self.read_index == 0 {
             return;
         }
-        if self.read_index == self.write_index {
-            self.write_index = 0;
-            self.read_index = 0;
-            return;
-        }
+        // As long as read_bytes performs this check and is the only way to
+        // advance read_index, this block can never execute.
+        // if self.read_index == self.write_index {
+        //     self.write_index = 0;
+        //     self.read_index = 0;
+        //     return;
+        // }
         self.mem
             .as_mut()
             .copy_within(self.read_index..self.write_index, 0);
@@ -979,6 +981,51 @@ mod tests {
     fn test_wrote_too_much() {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
         buf.wrote(17);
+    }
+
+    #[test]
+    fn test_shift_empty() {
+        let mut buf: FixedBuf<[u8; 4]> = FixedBuf::default();
+        buf.shift();
+        buf.write_str("abcd").unwrap();
+        assert_eq!("abcd", escape_ascii(buf.readable()));
+    }
+
+    #[test]
+    fn test_shift_half_filled() {
+        let mut buf: FixedBuf<[u8; 6]> = FixedBuf::default();
+        buf.write_str("abcd").unwrap();
+        buf.shift();
+        buf.read_bytes(2);
+        buf.write_str("ef").unwrap();
+        assert_eq!(NotEnoughSpaceError {}, buf.write_str("gh").unwrap_err());
+        buf.shift();
+        buf.write_str("gh").unwrap();
+        assert_eq!("cdefgh", escape_ascii(buf.readable()));
+    }
+
+    #[test]
+    fn test_shift_full() {
+        let mut buf: FixedBuf<[u8; 4]> = FixedBuf::default();
+        buf.write_str("abcd").unwrap();
+        buf.shift();
+        buf.read_bytes(2);
+        assert_eq!(NotEnoughSpaceError {}, buf.write_str("e").unwrap_err());
+        buf.shift();
+        buf.write_str("e").unwrap();
+        buf.write_str("f").unwrap();
+        assert_eq!(NotEnoughSpaceError {}, buf.write_str("g").unwrap_err());
+        assert_eq!("cdef", escape_ascii(buf.readable()));
+    }
+
+    #[test]
+    fn test_shift_read_all() {
+        let mut buf: FixedBuf<[u8; 4]> = FixedBuf::default();
+        buf.write_str("abcd").unwrap();
+        buf.read_bytes(4);
+        buf.shift();
+        buf.write_str("efgh").unwrap();
+        assert_eq!("efgh", escape_ascii(buf.readable()));
     }
 
     #[test]
