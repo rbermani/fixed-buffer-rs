@@ -817,6 +817,15 @@ mod tests {
     static STATIC_FIXED_BUF: Lazy<Mutex<FixedBuf<[u8; 128 * 1024]>>> =
         Lazy::new(|| Mutex::new(FixedBuf::new([0; 128 * 1024])));
 
+    fn deframe_line_reject_xs(
+        data: &[u8],
+    ) -> Result<Option<(core::ops::Range<usize>, usize)>, MalformedInputError> {
+        if data.contains(&b'x') || data.contains(&b'X') {
+            return Err(MalformedInputError(String::from("err1")));
+        }
+        deframe_line(data)
+    }
+
     #[test]
     fn test_static_fixed_buf() {
         let mut buf = STATIC_FIXED_BUF.lock().unwrap();
@@ -1035,15 +1044,6 @@ mod tests {
         buf.shift();
         buf.write_str("efgh").unwrap();
         assert_eq!("efgh", escape_ascii(buf.readable()));
-    }
-
-    fn deframe_line_reject_xs(
-        data: &[u8],
-    ) -> Result<Option<(core::ops::Range<usize>, usize)>, MalformedInputError> {
-        if data.contains(&b'x') || data.contains(&b'X') {
-            return Err(MalformedInputError(String::from("err1")));
-        }
-        deframe_line(data)
     }
 
     #[test]
