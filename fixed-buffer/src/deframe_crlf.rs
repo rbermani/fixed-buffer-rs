@@ -2,7 +2,6 @@
 
 use super::MalformedInputError;
 
-// TODO(mleonhard) Test.
 /// Deframes lines that are terminated by `b"\r\n"`.
 /// Ignores solitary `b'\n'`.
 ///
@@ -18,4 +17,21 @@ pub fn deframe_crlf(
         }
     }
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dataframe_crlf() {
+        assert_eq!(None, deframe_crlf(b"").unwrap());
+        assert_eq!(None, deframe_crlf(b"abc").unwrap());
+        assert_eq!(None, deframe_crlf(b"abc\r").unwrap());
+        assert_eq!(None, deframe_crlf(b"abc\n").unwrap());
+        assert_eq!(Some((0..3, 5)), deframe_crlf(b"abc\r\n").unwrap());
+        assert_eq!(Some((0..3, 5)), deframe_crlf(b"abc\r\ndef").unwrap());
+        assert_eq!(Some((0..3, 5)), deframe_crlf(b"abc\r\ndef\r\n").unwrap());
+        assert_eq!(Some((0..4, 6)), deframe_crlf(b"abc\n\r\n").unwrap());
+    }
 }
