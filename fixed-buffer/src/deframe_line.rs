@@ -2,7 +2,6 @@
 
 use super::MalformedInputError;
 
-// TODO(mleonhard) Test.
 /// Deframes lines that are terminated by either `b'\n'` or `b"\r\n"`.
 ///
 /// See [`read_frame`](struct.FixedBuf.html#method.read_frame).
@@ -22,4 +21,25 @@ pub fn deframe_line(
         }
     }
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dataframe_crlf() {
+        assert_eq!(None, deframe_line(b"").unwrap());
+        assert_eq!(None, deframe_line(b"abc").unwrap());
+        assert_eq!(None, deframe_line(b"abc\r").unwrap());
+        assert_eq!(Some((0..0, 1)), deframe_line(b"\n").unwrap());
+        assert_eq!(Some((0..0, 2)), deframe_line(b"\r\n").unwrap());
+        assert_eq!(Some((0..3, 4)), deframe_line(b"abc\n").unwrap());
+        assert_eq!(Some((0..3, 5)), deframe_line(b"abc\r\n").unwrap());
+        assert_eq!(Some((0..3, 4)), deframe_line(b"abc\ndef").unwrap());
+        assert_eq!(Some((0..3, 5)), deframe_line(b"abc\r\ndef").unwrap());
+        assert_eq!(Some((0..3, 4)), deframe_line(b"abc\ndef\n").unwrap());
+        assert_eq!(Some((0..3, 5)), deframe_line(b"abc\r\ndef\r\n").unwrap());
+        assert_eq!(Some((0..4, 6)), deframe_line(b"abc\r\r\n").unwrap());
+    }
 }

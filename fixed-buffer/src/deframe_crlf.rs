@@ -29,6 +29,7 @@ mod tests {
         assert_eq!(None, deframe_crlf(b"abc").unwrap());
         assert_eq!(None, deframe_crlf(b"abc\r").unwrap());
         assert_eq!(None, deframe_crlf(b"abc\n").unwrap());
+        assert_eq!(Some((0..0, 2)), deframe_crlf(b"\r\n").unwrap());
         assert_eq!(Some((0..3, 5)), deframe_crlf(b"abc\r\n").unwrap());
         assert_eq!(Some((0..3, 5)), deframe_crlf(b"abc\r\ndef").unwrap());
         assert_eq!(Some((0..3, 5)), deframe_crlf(b"abc\r\ndef\r\n").unwrap());
