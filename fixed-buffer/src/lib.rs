@@ -542,8 +542,7 @@ impl<T: AsMut<[u8]>> FixedBuf<T> {
     ///
     /// Returns `Ok(data.len())` if it wrote all of the bytes.
     ///
-    /// Returns
-    /// [`core::result::Result::Err`](https://doc.rust-lang.org/core/result/enum.Result.html#variant.Err)
+    /// Returns [`NotEnoughSpaceError`]
     /// if the buffer doesn't have enough free space at the end for all of the bytes.
     ///
     /// See [`shift`](#method.shift).
@@ -946,18 +945,14 @@ mod tests {
 
     #[test]
     fn test_write_str() {
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut buf: FixedBuf<[u8; 4]> = FixedBuf::default();
         buf.write_str("a").unwrap();
-        buf.write_str("b").unwrap();
-        assert_eq!("ab", escape_ascii(buf.readable()));
-        let many_cs = "c".repeat(13);
-        buf.write_str(&many_cs).unwrap();
+        buf.write_str("bc").unwrap();
+        assert_eq!("abc", escape_ascii(buf.readable()));
+        assert_eq!(Err(NotEnoughSpaceError {}), buf.write_str("de"));
         buf.write_str("d").unwrap();
-        assert_eq!(
-            "ab".to_string() + &many_cs + "d",
-            escape_ascii(buf.readable())
-        );
-        buf.write_str("e").unwrap_err();
+        assert_eq!("abcd", escape_ascii(buf.readable()));
+        assert_eq!(Err(NotEnoughSpaceError {}), buf.write_str("e"));
     }
 
     #[test]
