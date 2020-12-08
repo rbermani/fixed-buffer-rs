@@ -25,7 +25,7 @@ pub fn deframe_line(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::super::*;
 
     #[test]
     fn test_dataframe_crlf() {

@@ -210,19 +210,24 @@
 #![forbid(unsafe_code)]
 
 mod escape_ascii;
-pub use escape_ascii::escape_ascii;
+pub use escape_ascii::*;
 
 mod deframe_crlf;
-pub use deframe_crlf::deframe_crlf;
+pub use deframe_crlf::*;
 
 mod deframe_line;
-pub use deframe_line::deframe_line;
+pub use deframe_line::*;
 
 mod read_write_chain;
-pub use read_write_chain::ReadWriteChain;
+pub use read_write_chain::*;
 
 mod read_write_take;
-pub use read_write_take::ReadWriteTake;
+pub use read_write_take::*;
+
+#[cfg(test)]
+mod test_utils;
+#[cfg(test)]
+pub use test_utils::*;
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct NotEnoughSpaceError {}
@@ -1168,13 +1173,6 @@ mod tests {
         assert_eq!("de", escape_ascii(buf.readable()));
     }
 
-    struct PanickingRead {}
-    impl std::io::Read for PanickingRead {
-        fn read(&mut self, _buf: &mut [u8]) -> Result<usize, std::io::Error> {
-            panic!("PanickingRead read");
-        }
-    }
-
     #[test]
     fn test_read_frame_complete_doesnt_read() {
         let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
@@ -1182,7 +1180,7 @@ mod tests {
         assert_eq!(
             "abc",
             escape_ascii(
-                buf.read_frame(&mut PanickingRead {}, deframe_line_reject_xs)
+                buf.read_frame(&mut FakeReadWriter::empty(), deframe_line_reject_xs)
                     .unwrap()
                     .unwrap()
             )
@@ -1197,7 +1195,7 @@ mod tests {
         assert_eq!(
             "abc",
             escape_ascii(
-                buf.read_frame(&mut PanickingRead {}, deframe_line_reject_xs)
+                buf.read_frame(&mut FakeReadWriter::empty(), deframe_line_reject_xs)
                     .unwrap()
                     .unwrap()
             )
@@ -1211,7 +1209,7 @@ mod tests {
         buf.write_str("x").unwrap();
         assert_eq!(
             std::io::ErrorKind::InvalidData,
-            buf.read_frame(&mut PanickingRead {}, deframe_line_reject_xs)
+            buf.read_frame(&mut FakeReadWriter::empty(), deframe_line_reject_xs)
                 .unwrap_err()
                 .kind()
         );
@@ -1315,17 +1313,12 @@ mod tests {
         assert_eq!("abcd", escape_ascii(buf.read_all()));
 
         // Reads only once.
-        struct SingleRead(bool);
-        impl std::io::Read for SingleRead {
-            fn read(&mut self, mut buf: &mut [u8]) -> Result<usize, std::io::Error> {
-                if self.0 {
-                    panic!("read twice");
-                }
-                std::io::Write::write(&mut buf, b"12")
-            }
-        }
-        assert_eq!(2, buf.copy_once_from(&mut SingleRead(false)).unwrap());
-        assert_eq!("12", escape_ascii(buf.read_all()));
+        assert_eq!(
+            2,
+            buf.copy_once_from(&mut FakeReadWriter::new(vec![Ok(2)]))
+                .unwrap()
+        );
+        assert_eq!("ab", escape_ascii(buf.read_all()));
     }
 
     #[test]

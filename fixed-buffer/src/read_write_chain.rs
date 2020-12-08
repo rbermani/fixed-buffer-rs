@@ -64,37 +64,6 @@ impl<'a, R: std::io::Read, RW: std::io::Read + std::io::Write> std::io::Write
 #[cfg(test)]
 mod tests {
     use super::super::*;
-    use super::*;
-
-    struct PanickingReadWriter {}
-    impl std::io::Read for PanickingReadWriter {
-        fn read(&mut self, _buf: &mut [u8]) -> Result<usize, std::io::Error> {
-            panic!("PanickingReadWriter read");
-        }
-    }
-    impl std::io::Write for PanickingReadWriter {
-        fn write(&mut self, _buf: &[u8]) -> Result<usize, std::io::Error> {
-            panic!("PanickingReadWriter write");
-        }
-        fn flush(&mut self) -> Result<(), std::io::Error> {
-            panic!("PanickingReadWriter flush");
-        }
-    }
-
-    struct ErroringReadWriter {}
-    impl std::io::Read for ErroringReadWriter {
-        fn read(&mut self, _buf: &mut [u8]) -> Result<usize, std::io::Error> {
-            Err(std::io::Error::new(std::io::ErrorKind::Other, "err1"))
-        }
-    }
-    impl std::io::Write for ErroringReadWriter {
-        fn write(&mut self, _buf: &[u8]) -> Result<usize, std::io::Error> {
-            Err(std::io::Error::new(std::io::ErrorKind::Other, "err1"))
-        }
-        fn flush(&mut self) -> Result<(), std::io::Error> {
-            Err(std::io::Error::new(std::io::ErrorKind::Other, "err1"))
-        }
-    }
 
     #[test]
     fn both_empty() {
@@ -109,7 +78,7 @@ mod tests {
     #[test]
     fn doesnt_read_second_when_first_has_data() {
         let mut reader = std::io::Cursor::new(b"abc");
-        let mut read_writer = PanickingReadWriter {};
+        let mut read_writer = FakeReadWriter::empty();
         let mut chain = ReadWriteChain::new(&mut reader, &mut read_writer);
         let mut buf = [b'.'; 4];
         assert_eq!(3, std::io::Read::read(&mut chain, &mut buf).unwrap());
@@ -118,8 +87,8 @@ mod tests {
 
     #[test]
     fn doesnt_read_second_when_first_returns_error() {
-        let mut reader = ErroringReadWriter {};
-        let mut read_writer = PanickingReadWriter {};
+        let mut reader = FakeReadWriter::new(vec![Err(err1()), Err(err1())]);
+        let mut read_writer = FakeReadWriter::empty();
         let mut chain = ReadWriteChain::new(&mut reader, &mut read_writer);
         let mut buf = [b'.'; 4];
         let err = std::io::Read::read(&mut chain, &mut buf).unwrap_err();
@@ -156,7 +125,7 @@ mod tests {
     #[test]
     fn returns_error_from_second() {
         let mut reader = std::io::Cursor::new(b"");
-        let mut read_writer = ErroringReadWriter {};
+        let mut read_writer = FakeReadWriter::new(vec![Err(err1()), Err(err1())]);
         let mut chain = ReadWriteChain::new(&mut reader, &mut read_writer);
         let mut buf = [b'.'; 4];
         let err = std::io::Read::read(&mut chain, &mut buf).unwrap_err();
@@ -169,7 +138,7 @@ mod tests {
     #[test]
     fn passes_writes_through() {
         let mut reader = std::io::Cursor::new(b"");
-        let mut read_writer = FixedBuf::new([b'-'; 4]);
+        let mut read_writer = FixedBuf::new([0u8; 4]);
         let mut chain = ReadWriteChain::new(&mut reader, &mut read_writer);
         assert_eq!(3, std::io::Write::write(&mut chain, b"abc").unwrap());
         assert_eq!("abc", read_writer.escape_ascii());
