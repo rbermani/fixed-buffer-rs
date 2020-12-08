@@ -14,6 +14,7 @@
 //! - Easy to learn & use.  Easy to maintain code that uses it.
 //! - Works with Rust `latest`, `beta`, and `nightly`
 //! - No macros
+//! - Good test coverage (98%)
 //! - [fixed_buffer_tokio](https://crates.io/crates/fixed-buffer-tokio)
 //!   provides AsyncRead and AsyncWrite
 //!
@@ -21,9 +22,6 @@
 //! - Not a circular buffer.
 //!   You can call `shift()` periodically
 //!   to move unread bytes to the front of the buffer.
-//! - There is no `iterate_delimited(AsyncRead)`.
-//!   Because of borrowing rules, such a function would need to return
-//!   non-borrowed (allocated and copied) data.
 //!
 //! # Documentation
 //! https://docs.rs/fixed-buffer
@@ -196,6 +194,8 @@
 //!   - Update it manually
 //!   - https://crate-ci.github.io/release/changelog.html
 //! - Implement async-std read & write traits
+//! - Add an `frame_copy_iter` function.
+//!   Because of borrowing rules, this function must return non-borrowed (allocated and copied) data.
 //! - Switch to const generics once they are stable:
 //!   - https://github.com/rust-lang/rust/issues/44580
 //!   - https://stackoverflow.com/a/56543462
