@@ -956,6 +956,18 @@ mod tests {
     }
 
     #[test]
+    fn test_write_bytes() {
+        let mut buf: FixedBuf<[u8; 4]> = FixedBuf::default();
+        assert_eq!(Ok(1usize), buf.write_bytes(b"a"));
+        assert_eq!(Ok(2), buf.write_bytes(b"bc"));
+        assert_eq!("abc", escape_ascii(buf.readable()));
+        assert_eq!(Err(NotEnoughSpaceError {}), buf.write_bytes(b"de"));
+        assert_eq!(Ok(1), buf.write_bytes(b"d"));
+        assert_eq!("abcd", escape_ascii(buf.readable()));
+        assert_eq!(Err(NotEnoughSpaceError {}), buf.write_bytes(b"e"));
+    }
+
+    #[test]
     fn test_writable_and_wrote() {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
         assert_eq!(16, buf.writable().unwrap().len());
