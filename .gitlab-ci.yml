@@ -11,6 +11,7 @@ variables:
 before_script:
   - rustc --version && cargo --version
   - du -sh cargo/ fixed-buffer/target/ fixed-buffer-tokio/target/ || true
+  - cargo install cargo-readme
 
 after_script:
   - du -sh cargo/ fixed-buffer/target/ fixed-buffer-tokio/target/ || true
