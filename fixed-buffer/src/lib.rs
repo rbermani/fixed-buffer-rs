@@ -15,8 +15,7 @@
 //! - Works with Rust `latest`, `beta`, and `nightly`
 //! - No macros
 //! - Good test coverage (99%)
-//! - [fixed_buffer_tokio](https://crates.io/crates/fixed-buffer-tokio)
-//!   provides AsyncRead and AsyncWrite
+//! - [fixed_buffer_tokio](https://crates.io/crates/fixed-buffer-tokio) adds async functions
 //!
 //! # Limitations
 //! - Not a circular buffer.
@@ -145,6 +144,12 @@
 //! 1. Run `./release.sh`
 //!
 //! # Changelog
+//! - v0.2.1
+//!   - Add
+//!     [`deframe`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.deframe)
+//!     and
+//!     [`mem`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.mem),
+//!     needed by `AsyncFixedBuf::read_frame`.
 //! - v0.2.0
 //!   - Move tokio support to [fixed_buffer_tokio](https://crates.io/crates/fixed-buffer-tokio).
 //!   - Add
@@ -234,6 +239,11 @@ pub struct NotEnoughSpaceError {}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct MalformedInputError(String);
+impl MalformedInputError {
+    pub fn new(msg: String) -> Self {
+        Self(msg)
+    }
+}
 
 /// FixedBuf is a fixed-length byte buffer.
 /// You can write bytes to it and then read them back.
@@ -438,6 +448,13 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
     /// ```
     pub fn escape_ascii(&self) -> String {
         escape_ascii(self.readable())
+    }
+
+    /// This is a low-level function.
+    ///
+    /// Borrows the entire internal memory buffer.
+    pub fn mem(&self) -> &[u8] {
+        self.mem.as_ref()
     }
 
     /// Returns the slice of readable bytes in the buffer.
@@ -653,6 +670,46 @@ impl<T: AsMut<[u8]>> FixedBuf<T> {
 }
 
 impl<T: AsRef<[u8]> + AsMut<[u8]>> FixedBuf<T> {
+    /// This is a low-level function.
+    /// Use [`read_frame`](#method.read_frame) instead.
+    ///
+    /// Calls `deframer_fn` to check if the buffer contains a complete frame.
+    /// Consumes the frame bytes from the buffer
+    /// and returns the range of the frame's contents in the internal memory.
+    /// Use [`mem`](#method.mem) to immutably borrow the internal memory and
+    /// construct the slice with `&mem()[range]`.
+    /// This is necessary because `deframe` borrows `self` mutably but
+    /// `read_frame` needs to borrow it immutably and return a slice.
+    ///
+    /// Returns `None` if the buffer is empty or contains an incomplete frame.
+    ///
+    /// Returns [`InvalidData`](std::io::ErrorKind::InvalidData)
+    /// when `deframer_fn` returns an error.
+    pub fn deframe<F>(
+        &mut self,
+        deframer_fn: F,
+    ) -> Result<Option<core::ops::Range<usize>>, std::io::Error>
+    where
+        F: Fn(&[u8]) -> Result<Option<(core::ops::Range<usize>, usize)>, MalformedInputError>,
+    {
+        if self.is_empty() {
+            return Ok(None);
+        }
+        match deframer_fn(self.readable()) {
+            Err(e) => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("{:?}", e),
+            )),
+            Ok(Some((data_range, block_len))) => {
+                let mem_start = self.read_index + data_range.start;
+                let mem_end = self.read_index + data_range.end;
+                self.read_bytes(block_len);
+                Ok(Some(mem_start..mem_end))
+            }
+            Ok(None) => Ok(None),
+        }
+    }
+
     /// Reads from `reader` into the buffer.
     ///
     /// After each read, calls `deframer_fn`
@@ -740,21 +797,10 @@ impl<T: AsRef<[u8]> + AsMut<[u8]>> FixedBuf<T> {
     {
         loop {
             if !self.is_empty() {
-                match deframer_fn(self.readable()) {
-                    Err(e) => {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            format!("{:?}", e),
-                        ))
-                    }
-                    Ok(Some((data_range, block_len))) => {
-                        let mem_start = self.read_index + data_range.start;
-                        let mem_end = self.read_index + data_range.end;
-                        self.read_bytes(block_len);
-                        return Ok(Some(&self.mem.as_ref()[mem_start..mem_end]));
-                    }
-                    Ok(None) => {}
+                if let Some(frame_range) = self.deframe(&deframer_fn)? {
+                    return Ok(Some(&self.mem()[frame_range]));
                 }
+                // None case falls through.
             }
             self.shift();
             let writable = self.writable().ok_or_else(|| {
@@ -821,7 +867,7 @@ mod tests {
         data: &[u8],
     ) -> Result<Option<(core::ops::Range<usize>, usize)>, MalformedInputError> {
         if data.contains(&b'x') || data.contains(&b'X') {
-            return Err(MalformedInputError(String::from("err1")));
+            return Err(MalformedInputError::new("err1".to_string()));
         }
         deframe_line(data)
     }
@@ -1044,6 +1090,27 @@ mod tests {
         buf.shift();
         buf.write_str("efgh").unwrap();
         assert_eq!("efgh", escape_ascii(buf.readable()));
+    }
+
+    #[test]
+    fn test_deframe() {
+        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        // Empty
+        assert_eq!(None, buf.deframe(deframe_line_reject_xs).unwrap());
+        // Incomplete
+        buf.write_str("abc").unwrap();
+        assert_eq!(None, buf.deframe(deframe_line_reject_xs).unwrap());
+        assert_eq!("abc", escape_ascii(buf.readable()));
+        // Complete
+        buf.write_str("\n").unwrap();
+        assert_eq!(Some(0..3), buf.deframe(deframe_line_reject_xs).unwrap());
+        assert_eq!("", escape_ascii(buf.readable()));
+        // Error
+        buf.write_str("x").unwrap();
+        assert_eq!(
+            std::io::ErrorKind::InvalidData,
+            buf.deframe(deframe_line_reject_xs).unwrap_err().kind()
+        );
     }
 
     #[test]
