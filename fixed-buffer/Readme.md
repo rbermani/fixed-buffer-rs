@@ -138,6 +138,7 @@ constructor is useful in tests.
 1. Run `../release.sh`
 
 ## Changelog
+- v0.2.2 - Add badges to readme
 - v0.2.1 - Add
   [`deframe`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.deframe)
   and
