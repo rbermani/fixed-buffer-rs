@@ -36,7 +36,7 @@ For a complete example, see
 1. Run `../release.sh`
 
 ## Changelog
-- v0.1.1 - First published version
+- v0.1.0 - First published version
 
 
 License: Apache-2.0
