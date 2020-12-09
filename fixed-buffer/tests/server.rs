@@ -22,8 +22,8 @@ use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::println;
 use std::time::Duration;
 
-fn handle_hello<RW: Read + Write>(mut read_writer: RW) -> Result<(), std::io::Error> {
-    read_writer.write_all("HI\n".as_bytes())
+fn handle_hello<W: Write>(mut writer: W) -> Result<(), std::io::Error> {
+    writer.write_all("HI\n".as_bytes())
 }
 
 struct Hasher32Writer<'a, T: Hasher32>(&'a mut T);
