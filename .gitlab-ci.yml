@@ -10,16 +10,17 @@ variables:
 
 before_script:
   - rustc --version && cargo --version
-  - du -sh target/ cargo/ || true
+  - du -sh cargo/ fixed-buffer/target/ fixed-buffer-tokio/target/ || true
 
 after_script:
-  - du -sh target/ cargo/ || true
+  - du -sh cargo/ fixed-buffer/target/ fixed-buffer-tokio/target/ || true
 
 cache:
   # Increment the 'gen' number to clear the caches.
   key: $CI_JOB_NAME-$CI_COMMIT_BRANCH-gen2
   paths:
-    - target/
+    - fixed-buffer/target/
+    - fixed-buffer-tokio/target/
     - cargo/
 
 rust-latest:
@@ -28,14 +29,14 @@ rust-latest:
   script:
     - cargo fmt --version || rustup component add rustfmt
     - cargo clippy --version || rustup component add clippy
-    - ./check.sh
+    - ./check-all.sh
 
 rust-beta:
   stage: stage1
   # Switch to official rust:beta image once it is available: https://github.com/rust-lang/docker-rust/issues/14
   image: instrumentisto/rust:beta
   script:
-    - ./check.sh
+    - ./check-all.sh
 
 rust-nightly:
   stage: stage1
@@ -50,5 +51,5 @@ rust-nightly:
     # "Include rustfmt and clippy components by default" https://github.com/rust-lang/docker-rust/issues/37
     - cargo fmt --version || rustup component add rustfmt || cargo +nightly install --git https://github.com/rust-lang/rustfmt.git --branch master --force --features "rustfmt cargo-fmt" rustfmt-nightly
     - cargo clippy --version || rustup component add clippy || cargo install --git https://github.com/rust-lang/rust-clippy/ --force clippy
-    - ./check.sh
+    - ./check-all.sh
   allow_failure: true
