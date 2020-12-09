@@ -132,15 +132,14 @@ constructor is useful in tests.
 
 ## Release Process
 1. Edit `Cargo.toml` and bump version number.
-1. Run `./release.sh`
+1. Run `../release.sh`
 
 ## Changelog
-- v0.2.1
-  - Add
-    [`deframe`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.deframe)
-    and
-    [`mem`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.mem),
-    needed by `AsyncFixedBuf::read_frame`.
+- v0.2.1 - Add
+  [`deframe`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.deframe)
+  and
+  [`mem`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.mem),
+  needed by `AsyncFixedBuf::read_frame`.
 - v0.2.0
   - Move tokio support to [fixed_buffer_tokio](https://crates.io/crates/fixed-buffer-tokio).
   - Add
