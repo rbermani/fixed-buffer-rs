@@ -141,7 +141,7 @@
 //!
 //! # Release Process
 //! 1. Edit `Cargo.toml` and bump version number.
-//! 1. Run `./release.sh`
+//! 1. Run `../release.sh`
 //!
 //! # Changelog
 //! - v0.2.1
