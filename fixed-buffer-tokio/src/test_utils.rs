@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use std::task::Context;
 use tokio::io::ReadBuf;
 use tokio::macros::support::{Pin, Poll};

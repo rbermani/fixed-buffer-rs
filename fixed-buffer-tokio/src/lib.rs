@@ -1,3 +1,8 @@
+//! [![crates.io version](https://img.shields.io/crates/v/fixed-buffer-tokio.svg)](https://crates.io/crates/fixed-buffer-tokio)
+//! [![license: Apache 2.0](https://gitlab.com/leonhard-llc/fixed-buffer-rs/-/raw/main/license-apache-2.0.svg)](http://www.apache.org/licenses/LICENSE-2.0)
+//! [![unsafe forbidden](https://gitlab.com/leonhard-llc/fixed-buffer-rs/-/raw/main/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
+//! [![pipeline status](https://gitlab.com/leonhard-llc/fixed-buffer-rs/badges/main/pipeline.svg)](https://gitlab.com/leonhard-llc/fixed-buffer-rs/-/pipelines)
+//!
 //! This is a Rust library with fixed-size buffers,
 //! useful for network protocol parsers and file parsers.
 //!
