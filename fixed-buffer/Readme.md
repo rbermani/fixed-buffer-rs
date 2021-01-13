@@ -133,10 +133,6 @@ constructor is useful in tests.
 - [block-buffer](https://crates.io/crates/block-buffer), for processing fixed-length blocks of data
 - [arrayvec](https://crates.io/crates/arrayvec), vector with fixed capacity.
 
-## Release Process
-1. Edit `Cargo.toml` and bump version number.
-1. Run `../release.sh`
-
 ## Changelog
 - v0.2.2 - Add badges to readme
 - v0.2.1 - Add
@@ -206,5 +202,9 @@ constructor is useful in tests.
   - Linux ARM 64-bit (Raspberry Pi 3 and newer)
   - Linux ARM 32-bit (Raspberry Pi 2)
   - RISCV & ESP32 firmware?
+
+## Release Process
+1. Edit `Cargo.toml` and bump version number.
+1. Run `../release.sh`
 
 License: Apache-2.0

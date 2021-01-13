@@ -142,10 +142,6 @@
 //! - [block-buffer](https://crates.io/crates/block-buffer), for processing fixed-length blocks of data
 //! - [arrayvec](https://crates.io/crates/arrayvec), vector with fixed capacity.
 //!
-//! # Release Process
-//! 1. Edit `Cargo.toml` and bump version number.
-//! 1. Run `../release.sh`
-//!
 //! # Changelog
 //! - v0.2.2 - Add badges to readme
 //! - v0.2.1 - Add
@@ -215,6 +211,10 @@
 //!   - Linux ARM 64-bit (Raspberry Pi 3 and newer)
 //!   - Linux ARM 32-bit (Raspberry Pi 2)
 //!   - RISCV & ESP32 firmware?
+//!
+//! # Release Process
+//! 1. Edit `Cargo.toml` and bump version number.
+//! 1. Run `../release.sh`
 #![forbid(unsafe_code)]
 
 mod escape_ascii;
@@ -873,6 +873,25 @@ mod tests {
             return Err(MalformedInputError::new("err1".to_string()));
         }
         deframe_line(data)
+    }
+
+    #[test]
+    fn speculative_parsing() {
+        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        buf.write_str("abcd").unwrap();
+        {
+            let mut buf2 = FixedBuf::filled(buf.readable());
+            assert_eq!(b"a", buf2.read_bytes(1));
+        }
+        buf.read_bytes({
+            let mut buf2 = FixedBuf::filled(buf.readable());
+            assert_eq!(b"a", buf2.read_bytes(1));
+            assert_eq!(b"bc", buf2.read_bytes(2));
+            buf2.capacity() - buf2.len()
+        });
+        assert_eq!("d", escape_ascii(buf.readable()));
+        buf.write_str("e").unwrap();
+        assert_eq!("de", escape_ascii(buf.readable()));
     }
 
     #[test]
