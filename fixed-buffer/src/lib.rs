@@ -1438,6 +1438,39 @@ mod tests {
     }
 
     #[test]
+    fn test_read_and_copy_bytes() {
+        let mut buf = FixedBuf::filled("abc");
+        let mut one = [0_u8; 1];
+        assert_eq!(1, buf.read_and_copy_bytes(&mut one));
+        assert_eq!(b"a", &one);
+        assert_eq!("bc", buf.escape_ascii());
+        let mut four = [0_u8; 4];
+        assert_eq!(2, buf.read_and_copy_bytes(&mut four));
+        assert_eq!(&[b'b', b'c', 0, 0], &four);
+        assert_eq!("", buf.escape_ascii());
+    }
+
+    #[test]
+    fn test_read_and_copy_bytes_mut() {
+        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        buf.write_str("abc").unwrap();
+        let mut one = [0_u8; 1];
+        assert_eq!(1, buf.read_and_copy_bytes(&mut one));
+        assert_eq!(b"a", &one);
+        assert_eq!("bc", buf.escape_ascii());
+        let mut four = [0_u8; 4];
+        assert_eq!(2, buf.read_and_copy_bytes(&mut four));
+        assert_eq!(&[b'b', b'c', 0, 0], &four);
+        assert_eq!("", buf.escape_ascii());
+        buf.write_str("d").unwrap();
+        buf.shift();
+        buf.write_str("e").unwrap();
+        assert_eq!(1, buf.read_and_copy_bytes(&mut one));
+        assert_eq!(b"d", &one);
+        assert_eq!("e", buf.escape_ascii());
+    }
+
+    #[test]
     fn test_copy_once_from() {
         let mut buf: FixedBuf<[u8; 4]> = FixedBuf::default();
 
