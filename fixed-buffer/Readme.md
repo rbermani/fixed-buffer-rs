@@ -134,6 +134,10 @@ constructor is useful in tests.
 - [arrayvec](https://crates.io/crates/arrayvec), vector with fixed capacity.
 
 ## Changelog
+- v0.2.3
+  - Add
+    [`read_byte`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.read_byte)
+  - Implement [`UnwindSafe`](https://doc.rust-lang.org/std/panic/trait.UnwindSafe.html)
 - v0.2.2 - Add badges to readme
 - v0.2.1 - Add
   [`deframe`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.deframe)

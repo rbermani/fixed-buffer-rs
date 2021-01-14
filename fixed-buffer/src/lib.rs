@@ -143,6 +143,10 @@
 //! - [arrayvec](https://crates.io/crates/arrayvec), vector with fixed capacity.
 //!
 //! # Changelog
+//! - v0.2.3
+//!   - Add
+//!     [`read_byte`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.read_byte)
+//!   - Implement [`UnwindSafe`](https://doc.rust-lang.org/std/panic/trait.UnwindSafe.html)
 //! - v0.2.2 - Add badges to readme
 //! - v0.2.1 - Add
 //!   [`deframe`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.deframe)
@@ -475,6 +479,26 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
     /// [`fixed_buffer_tokio::AsyncReadExt`](https://docs.rs/fixed-buffer-tokio/latest/fixed_buffer_tokio/trait.AsyncReadExt.html).
     pub fn readable(&self) -> &[u8] {
         &self.mem.as_ref()[self.read_index..self.write_index]
+    }
+
+    /// Reads a single byte from the buffer.
+    ///
+    /// Panics if the buffer is empty.
+    pub fn read_byte(&mut self) -> u8 {
+        let result = self.mem.as_ref()[self.read_index];
+        self.read_bytes(1);
+        result
+    }
+
+    /// Reads a single byte from the buffer.
+    ///
+    /// Returns ParsingResult::Truncated if the buffer is empty.
+    pub fn try_read_byte<E>(&mut self) -> ParsingResult<u8, E> {
+        if self.is_empty() {
+            ParsingResult::Truncated
+        } else {
+            ParsingResult::Ok(self.read_byte())
+        }
     }
 
     /// Reads bytes from the buffer.
@@ -1337,6 +1361,36 @@ mod tests {
         buf.write_str("d").unwrap();
         assert_eq!("d", buf.escape_ascii());
         buf.read_bytes(1);
+        assert_eq!("", buf.escape_ascii());
+    }
+
+    #[test]
+    fn test_read_byte() {
+        let mut buf = FixedBuf::filled(b"abc");
+        assert_eq!(b'a', buf.read_byte());
+        assert_eq!("bc", buf.escape_ascii());
+        assert_eq!(b'b', buf.read_byte());
+        assert_eq!("c", buf.escape_ascii());
+        assert_eq!(b'c', buf.read_byte());
+        assert_eq!("", buf.escape_ascii());
+    }
+
+    #[test]
+    fn test_read_byte_mut() {
+        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        assert_eq!("", buf.escape_ascii());
+        buf.write_str("ab").unwrap();
+        assert_eq!(b'a', buf.read_byte());
+        assert_eq!("b", buf.escape_ascii());
+        buf.write_str("c").unwrap();
+        assert_eq!("bc", buf.escape_ascii());
+        assert_eq!(b'b', buf.read_byte());
+        assert_eq!("c", buf.escape_ascii());
+        assert_eq!(b'c', buf.read_byte());
+        assert_eq!("", buf.escape_ascii());
+        buf.write_str("d").unwrap();
+        assert_eq!("d", buf.escape_ascii());
+        assert_eq!(b'd', buf.read_byte());
         assert_eq!("", buf.escape_ascii());
     }
 
