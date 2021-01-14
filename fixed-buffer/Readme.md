@@ -136,7 +136,11 @@ constructor is useful in tests.
 ## Changelog
 - v0.2.3
   - Add
-    [`read_byte`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.read_byte)
+    [`read_byte`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.read_byte),
+    [`try_read_byte`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.try_read_byte),
+    [`try_read_bytes`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.try_read_bytes),
+    [`try_read_exact`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.try_read_exact),
+    [`try_parse`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.try_parse).
   - Implement [`UnwindSafe`](https://doc.rust-lang.org/std/panic/trait.UnwindSafe.html)
 - v0.2.2 - Add badges to readme
 - v0.2.1 - Add

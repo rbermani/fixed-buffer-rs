@@ -145,7 +145,11 @@
 //! # Changelog
 //! - v0.2.3
 //!   - Add
-//!     [`read_byte`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.read_byte)
+//!     [`read_byte`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.read_byte),
+//!     [`try_read_byte`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.try_read_byte),
+//!     [`try_read_bytes`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.try_read_bytes),
+//!     [`try_read_exact`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.try_read_exact),
+//!     [`try_parse`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.try_parse).
 //!   - Implement [`UnwindSafe`](https://doc.rust-lang.org/std/panic/trait.UnwindSafe.html)
 //! - v0.2.2 - Add badges to readme
 //! - v0.2.1 - Add
@@ -249,6 +253,38 @@ pub struct MalformedInputError(String);
 impl MalformedInputError {
     pub fn new(msg: String) -> Self {
         Self(msg)
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
+pub struct Truncated {}
+impl core::fmt::Display for Truncated {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
+        core::fmt::Debug::fmt(self, f)
+    }
+}
+impl std::error::Error for Truncated {}
+
+/// A trait for showing which parser errors mean the data was truncated.
+/// Callers can read more data and try parsing again.
+pub trait IsTruncated {
+    /// Returns `true` if `self` is a parser error that means the input data
+    /// was truncated.  The caller can read more data and try parsing again.
+    fn is_truncated(&self) -> bool;
+}
+
+/// A handy error wrapper that implements [`IsTruncated`](trait.IsTruncated.html).
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum ParsingError<E> {
+    Truncated,
+    Err(E),
+}
+impl<E> IsTruncated for ParsingError<E> {
+    fn is_truncated(&self) -> bool {
+        match self {
+            ParsingError::Truncated => true,
+            ParsingError::Err(_) => false,
+        }
     }
 }
 
@@ -492,12 +528,12 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
 
     /// Reads a single byte from the buffer.
     ///
-    /// Returns ParsingResult::Truncated if the buffer is empty.
-    pub fn try_read_byte<E>(&mut self) -> ParsingResult<u8, E> {
+    /// Returns `Truncated` if the buffer is empty.
+    pub fn try_read_byte(&mut self) -> Result<u8, Truncated> {
         if self.is_empty() {
-            ParsingResult::Truncated
+            Err(Truncated {})
         } else {
-            ParsingResult::Ok(self.read_byte())
+            Ok(self.read_byte())
         }
     }
 
@@ -520,6 +556,17 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
             self.read_index = 0;
         }
         &self.mem.as_ref()[old_read_index..new_read_index]
+    }
+
+    /// Reads bytes from the buffer.
+    ///
+    /// Returns `Truncated` if the buffer does not contain enough bytes.
+    pub fn try_read_bytes(&mut self, num_bytes: usize) -> Result<&[u8], Truncated> {
+        if self.len() < num_bytes {
+            Err(Truncated {})
+        } else {
+            Ok(self.read_bytes(num_bytes))
+        }
     }
 
     /// Reads all the bytes from the buffer.
@@ -545,6 +592,45 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
         copy_dest.copy_from_slice(src);
         self.read_bytes(len);
         len
+    }
+
+    /// Reads byte from the buffer and copies them into `dest`, filling it,
+    /// and returns `()`.
+    ///
+    /// Returns ParsingResult::Truncated if the buffer does not contain enough
+    /// bytes tp fill `dest`.
+    ///
+    /// Returns `()` if `dest` is zero-length.
+    pub fn try_read_exact(&mut self, dest: &mut [u8]) -> Result<(), Truncated> {
+        if dest.len() == 0 {
+            return Ok(());
+        }
+        if self.len() < dest.len() {
+            return Err(Truncated {});
+        }
+        let src = &self.readable()[..dest.len()];
+        dest.copy_from_slice(src);
+        self.read_bytes(dest.len());
+        Ok(())
+    }
+
+    // TODO(mleonhard) Document.
+    // TODO(mleonhard) Add example usage.
+    pub fn try_parse<R, E, F>(&mut self, f: F) -> Result<R, E>
+    where
+        E: IsTruncated,
+        F: FnOnce(&mut FixedBuf<&[u8]>) -> Result<R, E>,
+    {
+        let mut ro_buf = FixedBuf::filled(self.readable());
+        let result = f(&mut ro_buf);
+        if let Err(e) = &result {
+            if e.is_truncated() {
+                return result;
+            }
+        }
+        let num_bytes_read = ro_buf.capacity() - ro_buf.len();
+        self.read_bytes(num_bytes_read);
+        result
     }
 }
 
@@ -902,25 +988,6 @@ mod tests {
             return Err(MalformedInputError::new("err1".to_string()));
         }
         deframe_line(data)
-    }
-
-    #[test]
-    fn speculative_parsing() {
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
-        buf.write_str("abcd").unwrap();
-        {
-            let mut buf2 = FixedBuf::filled(buf.readable());
-            assert_eq!(b"a", buf2.read_bytes(1));
-        }
-        buf.read_bytes({
-            let mut buf2 = FixedBuf::filled(buf.readable());
-            assert_eq!(b"a", buf2.read_bytes(1));
-            assert_eq!(b"bc", buf2.read_bytes(2));
-            buf2.capacity() - buf2.len()
-        });
-        assert_eq!("d", escape_ascii(buf.readable()));
-        buf.write_str("e").unwrap();
-        assert_eq!("de", escape_ascii(buf.readable()));
     }
 
     #[test]
@@ -1427,6 +1494,38 @@ mod tests {
     }
 
     #[test]
+    fn test_try_read_bytes() {
+        let mut buf = FixedBuf::filled(b"abc");
+        assert_eq!(Ok("a".as_bytes()), buf.try_read_bytes(1));
+        assert_eq!("bc", buf.escape_ascii());
+        assert_eq!(Err(Truncated {}), buf.try_read_bytes(3));
+        assert_eq!("bc", buf.escape_ascii());
+        assert_eq!(Ok("bc".as_bytes()), buf.try_read_bytes(2));
+        assert_eq!("", buf.escape_ascii());
+        assert_eq!(Err(Truncated {}), buf.try_read_bytes(1));
+        assert_eq!("", buf.escape_ascii());
+    }
+
+    #[test]
+    fn test_try_read_bytes_mut() {
+        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        buf.write_str("abc").unwrap();
+        assert_eq!(Ok("a".as_bytes()), buf.try_read_bytes(1));
+        assert_eq!("bc", buf.escape_ascii());
+        assert_eq!(Err(Truncated {}), buf.try_read_bytes(3));
+        assert_eq!("bc", buf.escape_ascii());
+        assert_eq!(Ok("bc".as_bytes()), buf.try_read_bytes(2));
+        assert_eq!("", buf.escape_ascii());
+        assert_eq!(Err(Truncated {}), buf.try_read_bytes(1));
+        assert_eq!("", buf.escape_ascii());
+        buf.write_str("d").unwrap();
+        buf.shift();
+        buf.write_str("e").unwrap();
+        assert_eq!(Ok("d".as_bytes()), buf.try_read_bytes(1));
+        assert_eq!("e", buf.escape_ascii());
+    }
+
+    #[test]
     fn test_read_all() {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
         assert_eq!("", escape_ascii(buf.read_all()));
@@ -1468,6 +1567,141 @@ mod tests {
         assert_eq!(1, buf.read_and_copy_bytes(&mut one));
         assert_eq!(b"d", &one);
         assert_eq!("e", buf.escape_ascii());
+    }
+
+    #[test]
+    fn test_try_read_exact() {
+        let mut buf = FixedBuf::filled("abc");
+        let mut one = [0_u8; 1];
+        buf.try_read_exact(&mut one).unwrap();
+        assert_eq!(b"a", &one);
+        assert_eq!("bc", buf.escape_ascii());
+        let mut three = [0_u8; 3];
+        assert_eq!(Err(Truncated {}), buf.try_read_exact(&mut three));
+        assert_eq!(&[0, 0, 0], &three);
+        let mut two = [0_u8; 2];
+        buf.try_read_exact(&mut two).unwrap();
+        assert_eq!(b"bc", &two);
+        assert_eq!("", buf.escape_ascii());
+    }
+
+    #[test]
+    fn test_try_read_exact_mut() {
+        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        buf.write_str("abc").unwrap();
+        let mut one = [0_u8; 1];
+        buf.try_read_exact(&mut one).unwrap();
+        assert_eq!(b"a", &one);
+        assert_eq!("bc", buf.escape_ascii());
+        let mut three = [0_u8; 3];
+        assert_eq!(Err(Truncated {}), buf.try_read_exact(&mut three));
+        assert_eq!(&[0, 0, 0], &three);
+        assert_eq!("bc", buf.escape_ascii());
+        buf.write_str("d").unwrap();
+        buf.shift();
+        buf.write_str("e").unwrap();
+        buf.try_read_exact(&mut three).unwrap();
+        assert_eq!(b"bcd", &three);
+        assert_eq!("e", buf.escape_ascii());
+    }
+
+    #[test]
+    fn test_try_parse() {
+        #[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
+        enum ParsingError {
+            BadValue,
+            TooShort,
+            TooLong,
+            Truncated,
+        }
+        impl core::fmt::Display for ParsingError {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
+                core::fmt::Debug::fmt(self, f)
+            }
+        }
+        impl std::error::Error for ParsingError {}
+        impl IsTruncated for ParsingError {
+            fn is_truncated(&self) -> bool {
+                self == &ParsingError::Truncated
+            }
+        }
+        impl From<Truncated> for ParsingError {
+            fn from(_: Truncated) -> Self {
+                ParsingError::Truncated
+            }
+        }
+
+        fn count_as(buf: &mut FixedBuf<&[u8]>) -> Result<usize, ParsingError> {
+            let mut count: usize = 0;
+            loop {
+                match buf.try_read_byte()? {
+                    b'a' => {
+                        count += 1;
+                        if count > 3 {
+                            return Err(ParsingError::TooLong);
+                        }
+                    }
+                    b'b' if count < 1 => return Err(ParsingError::TooShort),
+                    b'b' => return Ok(count),
+                    _ => return Err(ParsingError::BadValue),
+                }
+            }
+        }
+
+        assert_eq!(
+            Err(ParsingError::Truncated),
+            FixedBuf::filled(b"").try_parse(count_as)
+        );
+        assert_eq!(
+            Err(ParsingError::Truncated),
+            FixedBuf::filled(b"a").try_parse(count_as)
+        );
+        assert_eq!(
+            Err(ParsingError::Truncated),
+            FixedBuf::filled(b"aa").try_parse(count_as)
+        );
+        assert_eq!(
+            Err(ParsingError::Truncated),
+            FixedBuf::filled(b"aaa").try_parse(count_as)
+        );
+        assert_eq!(
+            Err(ParsingError::TooLong),
+            FixedBuf::filled(b"aaaa").try_parse(count_as)
+        );
+        assert_eq!(
+            Err(ParsingError::TooShort),
+            FixedBuf::filled(b"b").try_parse(count_as)
+        );
+        assert_eq!(Ok(1), FixedBuf::filled(b"ab").try_parse(count_as));
+        assert_eq!(Ok(2), FixedBuf::filled(b"aab").try_parse(count_as));
+        assert_eq!(Ok(3), FixedBuf::filled(b"aaab").try_parse(count_as));
+        assert_eq!(
+            Err(ParsingError::TooLong),
+            FixedBuf::filled(b"aaaab").try_parse(count_as)
+        );
+        assert_eq!(
+            Err(ParsingError::BadValue),
+            FixedBuf::filled(b"ac").try_parse(count_as)
+        );
+
+        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        assert_eq!(Err(ParsingError::Truncated), buf.try_parse(count_as));
+        buf.write_str("a").unwrap();
+        assert_eq!(Err(ParsingError::Truncated), buf.try_parse(count_as));
+        assert_eq!("a", buf.escape_ascii());
+        buf.write_str("baaba").unwrap();
+        assert_eq!(Ok(1), buf.try_parse(count_as));
+        assert_eq!("aaba", buf.escape_ascii());
+        assert_eq!(Ok(2), buf.try_parse(count_as));
+        assert_eq!("a", buf.escape_ascii());
+        assert_eq!(Err(ParsingError::Truncated), buf.try_parse(count_as));
+        buf.write_str("cbab").unwrap();
+        assert_eq!(Err(ParsingError::BadValue), buf.try_parse(count_as));
+        assert_eq!("bab", buf.escape_ascii());
+        buf.clear();
+        buf.write_str("b").unwrap();
+        assert_eq!(Err(ParsingError::TooShort), buf.try_parse(count_as));
+        assert_eq!("", buf.escape_ascii());
     }
 
     #[test]
