@@ -218,7 +218,7 @@
 #![forbid(unsafe_code)]
 
 mod escape_ascii;
-pub use escape_ascii::*;
+pub use escape_ascii::escape_ascii;
 
 mod deframe_crlf;
 pub use deframe_crlf::*;
