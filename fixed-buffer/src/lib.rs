@@ -612,22 +612,104 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
         Ok(())
     }
 
-    // TODO(mleonhard) Document.
-    // TODO(mleonhard) Add example usage.
-    pub fn try_parse<R, E, F>(&mut self, f: F) -> Result<R, E>
+    /// Try to parse the buffer contents with `f`.
+    ///
+    /// `f` must return `None` to indicate that the buffer
+    /// contains an incomplete data record.
+    /// When `try_parse` returns None, the caller should add more data to the
+    /// buffer and call `try_parse` again.
+    ///
+    /// Undoes any reads that `f` made to the buffer if it returns `None`.
+    ///
+    /// `f` cannot borrow from the buffer.
+    /// We don't know how to write a safe `try_parse` method
+    /// that lets `f` borrow from the buffer.
+    /// If you know how, please send us a change or file an issue with details.
+    ///
+    /// # Example
+    /// ```
+    /// # use fixed_buffer::FixedBuf;
+    /// #[derive(Debug)]
+    /// enum ParseError {
+    ///     BufferFull,
+    ///     EOF,
+    ///     TooLong,
+    ///     NotUtf8,
+    /// }
+    /// # fn main() -> Result<(), ParseError> {
+    /// # let mut input: Vec<&[u8]> = vec![
+    /// #     &[0_u8, 1, b'a', 3, b'a'][..],
+    /// #     &[b'b', b'c',
+    /// #         // 17, // TooLong
+    /// #         // 1, // EOF
+    /// #     ][..],
+    /// #     // b"\x101234567890ABCDEF" // BufferFull
+    /// # ];
+    /// # let mut read_input = |buf: &mut FixedBuf<[u8; 16]>| {
+    /// #     if input.is_empty() {
+    /// #         return Err(ParseError::EOF);
+    /// #     }
+    /// #     buf.shift();
+    /// #     if let Some(writable) = buf.writable() {
+    /// #         let chunk = input.remove(0);
+    /// #         if chunk.len() > writable.len() {
+    /// #             return Err(ParseError::BufferFull);
+    /// #         }
+    /// #         let dest = &mut writable[..chunk.len()];
+    /// #         dest.copy_from_slice(&chunk);
+    /// #         buf.wrote(chunk.len());
+    /// #         Ok(())
+    /// #     } else {
+    /// #         Err(ParseError::BufferFull)
+    /// #     }
+    /// # };
+    /// # let mut output: Vec<String> = Vec::new();
+    /// # let mut process_record = |record| { output.push(record); Ok(()) };
+    ///
+    /// fn parse_record(buf: &mut FixedBuf<&[u8]>)
+    /// -> Option<Result<String, ParseError>>
+    /// {
+    ///     let len = buf.try_read_byte()? as usize;
+    ///     if len > 16 {
+    ///         return Some(Err(ParseError::TooLong));
+    ///     }
+    ///     let bytes = buf.try_read_bytes(len)?.to_vec();
+    ///     Some(String::from_utf8(bytes)
+    ///         .map_err(|_| ParseError::NotUtf8))
+    /// }
+    ///
+    /// let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+    /// loop {
+    ///     // Try reading bytes into the buffer.
+    ///     match read_input(&mut buf) {
+    ///         Err(ParseError::EOF) if buf.is_empty() => break,
+    ///         result => result?,
+    ///     }
+    ///     // Try parsing bytes into records.
+    ///     loop {
+    ///         if let Some(result) = buf.try_parse(parse_record) {
+    ///             let record = result?;
+    ///             process_record(record)?;
+    ///         } else {
+    ///             // Stop parsing and try reading more bytes.
+    ///             break;
+    ///         }
+    ///     }
+    /// }
+    /// # assert_eq!(vec!["", "a", "abc"], output);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn try_parse<R, F>(&mut self, f: F) -> Option<R>
     where
-        E: IsTruncated,
-        F: FnOnce(&mut FixedBuf<&[u8]>) -> Result<R, E>,
+        F: FnOnce(&mut FixedBuf<&[u8]>) -> Option<R>,
     {
         let mut ro_buf = FixedBuf::filled(self.readable());
         let result = f(&mut ro_buf);
-        if let Err(e) = &result {
-            if e.is_truncated() {
-                return result;
-            }
+        if result.is_some() {
+            let num_bytes_read = ro_buf.capacity() - ro_buf.len();
+            self.read_bytes(num_bytes_read);
         }
-        let num_bytes_read = ro_buf.capacity() - ro_buf.len();
-        self.read_bytes(num_bytes_read);
         result
     }
 }
@@ -1606,100 +1688,85 @@ mod tests {
     #[test]
     fn test_try_parse() {
         #[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
-        enum ParsingError {
+        enum CountError {
             BadValue,
             TooShort,
             TooLong,
-            Truncated,
         }
-        impl core::fmt::Display for ParsingError {
+        impl core::fmt::Display for CountError {
             fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
                 core::fmt::Debug::fmt(self, f)
             }
         }
-        impl std::error::Error for ParsingError {}
-        impl IsTruncated for ParsingError {
-            fn is_truncated(&self) -> bool {
-                self == &ParsingError::Truncated
-            }
-        }
-        impl From<Truncated> for ParsingError {
-            fn from(_: Truncated) -> Self {
-                ParsingError::Truncated
-            }
-        }
+        impl std::error::Error for CountError {}
 
-        fn count_as(buf: &mut FixedBuf<&[u8]>) -> Result<usize, ParsingError> {
+        fn count_as(buf: &mut FixedBuf<&[u8]>) -> Option<Result<usize, CountError>> {
             let mut count: usize = 0;
             loop {
                 match buf.try_read_byte()? {
                     b'a' => {
                         count += 1;
                         if count > 3 {
-                            return Err(ParsingError::TooLong);
+                            return Some(Err(CountError::TooLong));
                         }
                     }
-                    b'b' if count < 1 => return Err(ParsingError::TooShort),
-                    b'b' => return Ok(count),
-                    _ => return Err(ParsingError::BadValue),
+                    b'b' if count < 1 => return Some(Err(CountError::TooShort)),
+                    b'b' => return Some(Ok(count)),
+                    _ => return Some(Err(CountError::BadValue)),
                 }
             }
         }
 
+        assert_eq!(None, FixedBuf::filled(b"").try_parse(count_as));
+        assert_eq!(None, FixedBuf::filled(b"a").try_parse(count_as));
+        assert_eq!(None, FixedBuf::filled(b"aa").try_parse(count_as));
+        assert_eq!(None, FixedBuf::filled(b"aaa").try_parse(count_as));
         assert_eq!(
-            Err(ParsingError::Truncated),
-            FixedBuf::filled(b"").try_parse(count_as)
-        );
-        assert_eq!(
-            Err(ParsingError::Truncated),
-            FixedBuf::filled(b"a").try_parse(count_as)
-        );
-        assert_eq!(
-            Err(ParsingError::Truncated),
-            FixedBuf::filled(b"aa").try_parse(count_as)
-        );
-        assert_eq!(
-            Err(ParsingError::Truncated),
-            FixedBuf::filled(b"aaa").try_parse(count_as)
-        );
-        assert_eq!(
-            Err(ParsingError::TooLong),
+            Some(Err(CountError::TooLong)),
             FixedBuf::filled(b"aaaa").try_parse(count_as)
         );
         assert_eq!(
-            Err(ParsingError::TooShort),
+            Some(Err(CountError::TooShort)),
             FixedBuf::filled(b"b").try_parse(count_as)
         );
-        assert_eq!(Ok(1), FixedBuf::filled(b"ab").try_parse(count_as));
-        assert_eq!(Ok(2), FixedBuf::filled(b"aab").try_parse(count_as));
-        assert_eq!(Ok(3), FixedBuf::filled(b"aaab").try_parse(count_as));
+        assert_eq!(Some(Ok(1)), FixedBuf::filled(b"ab").try_parse(count_as));
+        assert_eq!(Some(Ok(2)), FixedBuf::filled(b"aab").try_parse(count_as));
+        assert_eq!(Some(Ok(3)), FixedBuf::filled(b"aaab").try_parse(count_as));
         assert_eq!(
-            Err(ParsingError::TooLong),
+            Some(Err(CountError::TooLong)),
             FixedBuf::filled(b"aaaab").try_parse(count_as)
         );
         assert_eq!(
-            Err(ParsingError::BadValue),
+            Some(Err(CountError::BadValue)),
             FixedBuf::filled(b"ac").try_parse(count_as)
         );
 
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
-        assert_eq!(Err(ParsingError::Truncated), buf.try_parse(count_as));
+        assert_eq!(None, buf.try_parse(count_as));
         buf.write_str("a").unwrap();
-        assert_eq!(Err(ParsingError::Truncated), buf.try_parse(count_as));
+        assert_eq!(None, buf.try_parse(count_as));
         assert_eq!("a", buf.escape_ascii());
         buf.write_str("baaba").unwrap();
-        assert_eq!(Ok(1), buf.try_parse(count_as));
+        assert_eq!(Some(Ok(1)), buf.try_parse(count_as));
         assert_eq!("aaba", buf.escape_ascii());
-        assert_eq!(Ok(2), buf.try_parse(count_as));
+        assert_eq!(Some(Ok(2)), buf.try_parse(count_as));
         assert_eq!("a", buf.escape_ascii());
-        assert_eq!(Err(ParsingError::Truncated), buf.try_parse(count_as));
+        assert_eq!(None, buf.try_parse(count_as));
         buf.write_str("cbab").unwrap();
-        assert_eq!(Err(ParsingError::BadValue), buf.try_parse(count_as));
+        assert_eq!(Some(Err(CountError::BadValue)), buf.try_parse(count_as));
         assert_eq!("bab", buf.escape_ascii());
         buf.clear();
         buf.write_str("b").unwrap();
-        assert_eq!(Err(ParsingError::TooShort), buf.try_parse(count_as));
+        assert_eq!(Some(Err(CountError::TooShort)), buf.try_parse(count_as));
         assert_eq!("", buf.escape_ascii());
+
+        // Cannot borrow.
+        // error: lifetime may not live long enough
+        // let mut borrowable_buf = FixedBuf::filled(b"a");
+        // assert_eq!(
+        //     Some(Ok(&b"a"[..])),
+        //     borrowable_buf.try_parse(|buf| Some(Ok::<&[u8], ()>(buf.readable())))
+        // );
     }
 
     #[test]
