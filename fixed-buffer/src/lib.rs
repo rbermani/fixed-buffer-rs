@@ -1349,19 +1349,19 @@ mod tests {
     }
 
     #[test]
-    fn test_readable_and_read() {
+    fn test_readable() {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
-        assert_eq!("", buf.escape_ascii());
+        assert_eq!("", escape_ascii(buf.readable()));
         buf.write_str("abc").unwrap();
-        assert_eq!("abc", buf.escape_ascii());
-        buf.read_bytes(1);
-        assert_eq!("bc", buf.escape_ascii());
+        assert_eq!("abc", escape_ascii(buf.readable()));
         buf.read_bytes(2);
-        assert_eq!("", buf.escape_ascii());
-        buf.write_str("d").unwrap();
-        assert_eq!("d", buf.escape_ascii());
+        assert_eq!("c", escape_ascii(buf.readable()));
         buf.read_bytes(1);
-        assert_eq!("", buf.escape_ascii());
+        assert_eq!("", escape_ascii(buf.readable()));
+        buf.write_str("d").unwrap();
+        assert_eq!("d", escape_ascii(buf.readable()));
+        buf.shift();
+        assert_eq!("d", escape_ascii(buf.readable()));
     }
 
     #[test]
@@ -1395,8 +1395,32 @@ mod tests {
     }
 
     #[test]
+    fn test_read_bytes() {
+        let mut buf = FixedBuf::filled("abc");
+        assert_eq!("a", escape_ascii(buf.read_bytes(1)));
+        assert_eq!("bc", buf.escape_ascii());
+        assert_eq!("bc", escape_ascii(buf.read_bytes(2)));
+        assert_eq!("", buf.escape_ascii());
+    }
+
+    #[test]
+    fn test_read_bytes_mut() {
+        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        buf.write_str("abc").unwrap();
+        assert_eq!("a", escape_ascii(buf.read_bytes(1)));
+        assert_eq!("bc", buf.escape_ascii());
+        assert_eq!("bc", escape_ascii(buf.read_bytes(2)));
+        assert_eq!("", buf.escape_ascii());
+        buf.write_str("d").unwrap();
+        buf.shift();
+        buf.write_str("e").unwrap();
+        assert_eq!("d", escape_ascii(buf.read_bytes(1)));
+        assert_eq!("e", buf.escape_ascii());
+    }
+
+    #[test]
     #[should_panic]
-    fn test_read_too_much() {
+    fn test_read_bytes_underflow() {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
         buf.write_str("a").unwrap();
         buf.read_bytes(2);
