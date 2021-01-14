@@ -521,9 +521,7 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
     ///
     /// Panics if the buffer is empty.
     pub fn read_byte(&mut self) -> u8 {
-        let result = self.mem.as_ref()[self.read_index];
-        self.read_bytes(1);
-        result
+        self.read_bytes(1)[0]
     }
 
     /// Reads a single byte from the buffer.
