@@ -268,6 +268,8 @@ pub struct FixedBuf<T> {
     write_index: usize,
 }
 
+impl<T> std::panic::UnwindSafe for FixedBuf<T> {}
+
 impl<T> FixedBuf<T> {
     /// Makes a new empty buffer, consuming or borrowing `mem`
     /// and using it as the internal memory array.
@@ -484,6 +486,9 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
             panic!("read would underflow");
         }
         let old_read_index = self.read_index;
+        // We update `read_index` after any possible panic.
+        // This keeps the struct consistent even when a panic happens.
+        // This complies with the contract of std::panic::UnwindSafe.
         self.read_index = new_read_index;
         if self.read_index == self.write_index {
             // All data has been read.  Reset the buffer.
@@ -500,7 +505,7 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
         self.read_bytes(self.len())
     }
 
-    /// Reads byte from the buffer and copies them into `dest`.
+    /// Reads bytes from the buffer and copies them into `dest`.
     ///
     /// Returns the number of bytes copied.
     ///
