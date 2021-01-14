@@ -32,21 +32,14 @@ pub fn escape_ascii(input: &[u8]) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::escape_ascii;
-
-    #[test]
-    fn test_escape_ascii() {
-        assert_eq!("", escape_ascii(b""));
-        assert_eq!("abc", escape_ascii(b"abc"));
-        assert_eq!("\\r\\n", escape_ascii(b"\r\n"));
-        assert_eq!(
-            "\\xe2\\x82\\xac",
-            escape_ascii(/* Euro sign */ "\u{20AC}".as_bytes())
-        );
-        assert_eq!("\\x01", escape_ascii(b"\x01"));
-        let buf = escape_ascii(b"abc");
-        assert_eq!("abc", buf);
-        assert_eq!(b"abc", buf.readable());
-    }
+#[test]
+fn test_escape_ascii() {
+    assert_eq!("", escape_ascii(b""));
+    assert_eq!("abc", escape_ascii(b"abc"));
+    assert_eq!("\\r\\n", escape_ascii(b"\r\n"));
+    assert_eq!(
+        "\\xe2\\x82\\xac",
+        escape_ascii(/* Euro sign */ "\u{20AC}".as_bytes())
+    );
+    assert_eq!("\\x01", escape_ascii(b"\x01"));
 }
