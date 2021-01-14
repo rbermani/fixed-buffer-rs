@@ -899,7 +899,7 @@ mod tests {
         let mut buf = STATIC_FIXED_BUF.lock().unwrap();
         assert_eq!(0, buf.len());
         buf.write_str("abc").unwrap();
-        assert_eq!("abc", escape_ascii(buf.read_all()));
+        assert_eq!("abc", buf.escape_ascii());
     }
 
     #[test]
@@ -922,26 +922,26 @@ mod tests {
     fn test_array_constructors() {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
         buf.write_str("abc").unwrap();
-        assert_eq!("abc", escape_ascii(buf.readable()));
+        assert_eq!("abc", buf.escape_ascii());
         let mem: [u8; 16] = buf.into_inner();
         buf = FixedBuf::new(mem);
-        assert_eq!("", escape_ascii(buf.readable()));
+        assert_eq!("", buf.escape_ascii());
         buf.wrote(3);
         assert_eq!("abc", escape_ascii(buf.read_all()));
-        assert_eq!("", escape_ascii(buf.readable()));
+        assert_eq!("", buf.escape_ascii());
     }
 
     #[test]
     fn test_box_array_constructors() {
         let mut buf: FixedBuf<Box<[u8]>> = FixedBuf::new(Box::new([0u8; 16]) as Box<[u8]>);
         buf.write_str("abc").unwrap();
-        assert_eq!("abc", escape_ascii(buf.readable()));
+        assert_eq!("abc", buf.escape_ascii());
         let mem = buf.into_inner();
         buf = FixedBuf::new(mem);
-        assert_eq!("", escape_ascii(buf.readable()));
+        assert_eq!("", buf.escape_ascii());
         buf.wrote(3);
         assert_eq!("abc", escape_ascii(buf.read_all()));
-        assert_eq!("", escape_ascii(buf.readable()));
+        assert_eq!("", buf.escape_ascii());
     }
 
     #[test]
@@ -949,12 +949,12 @@ mod tests {
         let mut mem = [0u8; 15];
         let mut buf = FixedBuf::new(&mut mem);
         buf.write_str("abc").unwrap();
-        assert_eq!("abc", escape_ascii(buf.readable()));
+        assert_eq!("abc", buf.escape_ascii());
         buf = FixedBuf::new(&mut mem);
-        assert_eq!("", escape_ascii(buf.readable()));
+        assert_eq!("", buf.escape_ascii());
         buf.wrote(3);
         assert_eq!("abc", escape_ascii(buf.read_all()));
-        assert_eq!("", escape_ascii(buf.readable()));
+        assert_eq!("", buf.escape_ascii());
     }
 
     #[test]
@@ -984,10 +984,10 @@ mod tests {
     #[test]
     fn empty() {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
-        assert_eq!("", escape_ascii(buf.readable()));
+        assert_eq!("", buf.escape_ascii());
         assert_eq!("", escape_ascii(buf.read_all()));
         buf.shift();
-        assert_eq!("", escape_ascii(buf.readable()));
+        assert_eq!("", buf.escape_ascii());
         assert_eq!("", escape_ascii(buf.read_all()));
     }
 
@@ -1028,10 +1028,10 @@ mod tests {
         let mut buf: FixedBuf<[u8; 4]> = FixedBuf::default();
         buf.write_str("a").unwrap();
         buf.write_str("bc").unwrap();
-        assert_eq!("abc", escape_ascii(buf.readable()));
+        assert_eq!("abc", buf.escape_ascii());
         assert_eq!(Err(NotEnoughSpaceError {}), buf.write_str("de"));
         buf.write_str("d").unwrap();
-        assert_eq!("abcd", escape_ascii(buf.readable()));
+        assert_eq!("abcd", buf.escape_ascii());
         assert_eq!(Err(NotEnoughSpaceError {}), buf.write_str("e"));
     }
 
@@ -1040,10 +1040,10 @@ mod tests {
         let mut buf: FixedBuf<[u8; 4]> = FixedBuf::default();
         assert_eq!(Ok(1usize), buf.write_bytes(b"a"));
         assert_eq!(Ok(2), buf.write_bytes(b"bc"));
-        assert_eq!("abc", escape_ascii(buf.readable()));
+        assert_eq!("abc", buf.escape_ascii());
         assert_eq!(Err(NotEnoughSpaceError {}), buf.write_bytes(b"de"));
         assert_eq!(Ok(1), buf.write_bytes(b"d"));
-        assert_eq!("abcd", escape_ascii(buf.readable()));
+        assert_eq!("abcd", buf.escape_ascii());
         assert_eq!(Err(NotEnoughSpaceError {}), buf.write_bytes(b"e"));
     }
 
@@ -1053,12 +1053,12 @@ mod tests {
         assert_eq!(16, buf.writable().unwrap().len());
         buf.writable().unwrap()[0] = 'a' as u8;
         buf.wrote(1);
-        assert_eq!("a", escape_ascii(buf.readable()));
+        assert_eq!("a", buf.escape_ascii());
         let many_bs = "b".repeat(15);
         assert_eq!(many_bs.len(), buf.writable().unwrap().len());
         buf.writable().unwrap().copy_from_slice(many_bs.as_bytes());
         buf.wrote(many_bs.len());
-        assert_eq!("a".to_string() + &many_bs, escape_ascii(buf.readable()));
+        assert_eq!("a".to_string() + &many_bs, buf.escape_ascii());
         assert_eq!(None, buf.writable());
     }
 
@@ -1074,7 +1074,7 @@ mod tests {
         let mut buf: FixedBuf<[u8; 4]> = FixedBuf::default();
         buf.shift();
         buf.write_str("abcd").unwrap();
-        assert_eq!("abcd", escape_ascii(buf.readable()));
+        assert_eq!("abcd", buf.escape_ascii());
     }
 
     #[test]
@@ -1087,7 +1087,7 @@ mod tests {
         assert_eq!(NotEnoughSpaceError {}, buf.write_str("gh").unwrap_err());
         buf.shift();
         buf.write_str("gh").unwrap();
-        assert_eq!("cdefgh", escape_ascii(buf.readable()));
+        assert_eq!("cdefgh", buf.escape_ascii());
     }
 
     #[test]
@@ -1101,7 +1101,7 @@ mod tests {
         buf.write_str("e").unwrap();
         buf.write_str("f").unwrap();
         assert_eq!(NotEnoughSpaceError {}, buf.write_str("g").unwrap_err());
-        assert_eq!("cdef", escape_ascii(buf.readable()));
+        assert_eq!("cdef", buf.escape_ascii());
     }
 
     #[test]
@@ -1111,7 +1111,7 @@ mod tests {
         buf.read_bytes(4);
         buf.shift();
         buf.write_str("efgh").unwrap();
-        assert_eq!("efgh", escape_ascii(buf.readable()));
+        assert_eq!("efgh", buf.escape_ascii());
     }
 
     #[test]
@@ -1122,11 +1122,11 @@ mod tests {
         // Incomplete
         buf.write_str("abc").unwrap();
         assert_eq!(None, buf.deframe(deframe_line_reject_xs).unwrap());
-        assert_eq!("abc", escape_ascii(buf.readable()));
+        assert_eq!("abc", buf.escape_ascii());
         // Complete
         buf.write_str("\n").unwrap();
         assert_eq!(Some(0..3), buf.deframe(deframe_line_reject_xs).unwrap());
-        assert_eq!("", escape_ascii(buf.readable()));
+        assert_eq!("", buf.escape_ascii());
         // Error
         buf.write_str("x").unwrap();
         assert_eq!(
@@ -1143,7 +1143,7 @@ mod tests {
             None,
             buf.read_frame(&mut reader, deframe_line_reject_xs).unwrap()
         );
-        assert_eq!("", escape_ascii(buf.readable()));
+        assert_eq!("", buf.escape_ascii());
     }
 
     #[test]
@@ -1156,7 +1156,7 @@ mod tests {
                 .unwrap_err()
                 .kind()
         );
-        assert_eq!("abc", escape_ascii(buf.readable()));
+        assert_eq!("abc", buf.escape_ascii());
     }
 
     #[test]
@@ -1171,7 +1171,7 @@ mod tests {
                     .unwrap()
             )
         );
-        assert_eq!("", escape_ascii(buf.readable()));
+        assert_eq!("", buf.escape_ascii());
     }
 
     #[test]
@@ -1186,7 +1186,7 @@ mod tests {
                     .unwrap()
             )
         );
-        assert_eq!("de", escape_ascii(buf.readable()));
+        assert_eq!("de", buf.escape_ascii());
     }
 
     #[test]
@@ -1199,7 +1199,7 @@ mod tests {
                 .unwrap_err()
                 .kind()
         );
-        assert_eq!("x", escape_ascii(buf.readable()));
+        assert_eq!("x", buf.escape_ascii());
     }
 
     #[test]
@@ -1213,7 +1213,7 @@ mod tests {
                 .unwrap_err()
                 .kind()
         );
-        assert_eq!("a", escape_ascii(buf.readable()));
+        assert_eq!("a", buf.escape_ascii());
     }
 
     #[test]
@@ -1227,7 +1227,7 @@ mod tests {
                 .unwrap_err()
                 .kind()
         );
-        assert_eq!("abc", escape_ascii(buf.readable()));
+        assert_eq!("abc", buf.escape_ascii());
     }
 
     #[test]
@@ -1243,7 +1243,7 @@ mod tests {
                     .unwrap()
             )
         );
-        assert_eq!("", escape_ascii(buf.readable()));
+        assert_eq!("", buf.escape_ascii());
     }
 
     #[test]
@@ -1259,7 +1259,7 @@ mod tests {
                     .unwrap()
             )
         );
-        assert_eq!("de", escape_ascii(buf.readable()));
+        assert_eq!("de", buf.escape_ascii());
     }
 
     #[test]
@@ -1274,7 +1274,7 @@ mod tests {
                     .unwrap()
             )
         );
-        assert_eq!("", escape_ascii(buf.readable()));
+        assert_eq!("", buf.escape_ascii());
     }
 
     #[test]
@@ -1289,7 +1289,7 @@ mod tests {
                     .unwrap()
             )
         );
-        assert_eq!("de", escape_ascii(buf.readable()));
+        assert_eq!("de", buf.escape_ascii());
     }
 
     #[test]
@@ -1302,7 +1302,7 @@ mod tests {
                 .unwrap_err()
                 .kind()
         );
-        assert_eq!("x", escape_ascii(buf.readable()));
+        assert_eq!("x", buf.escape_ascii());
     }
 
     #[test]
@@ -1316,23 +1316,23 @@ mod tests {
                 .unwrap_err()
                 .kind()
         );
-        assert_eq!("abcdefgh", escape_ascii(buf.readable()));
+        assert_eq!("abcdefgh", buf.escape_ascii());
     }
 
     #[test]
     fn test_readable_and_read() {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
-        assert_eq!("", escape_ascii(buf.readable()));
+        assert_eq!("", buf.escape_ascii());
         buf.write_str("abc").unwrap();
-        assert_eq!("abc", escape_ascii(buf.readable()));
+        assert_eq!("abc", buf.escape_ascii());
         buf.read_bytes(1);
-        assert_eq!("bc", escape_ascii(buf.readable()));
+        assert_eq!("bc", buf.escape_ascii());
         buf.read_bytes(2);
-        assert_eq!("", escape_ascii(buf.readable()));
+        assert_eq!("", buf.escape_ascii());
         buf.write_str("d").unwrap();
-        assert_eq!("d", escape_ascii(buf.readable()));
+        assert_eq!("d", buf.escape_ascii());
         buf.read_bytes(1);
-        assert_eq!("", escape_ascii(buf.readable()));
+        assert_eq!("", buf.escape_ascii());
     }
 
     #[test]
@@ -1422,15 +1422,30 @@ mod tests {
     }
 
     #[test]
+    fn test_escape_ascii() {
+        assert_eq!("", FixedBuf::filled(b"").escape_ascii());
+        assert_eq!("abc", FixedBuf::filled(b"abc").escape_ascii());
+        assert_eq!("\\r\\n", FixedBuf::filled(b"\r\n").escape_ascii());
+        assert_eq!(
+            "\\xe2\\x82\\xac",
+            FixedBuf::filled("€".as_bytes()).escape_ascii()
+        );
+        assert_eq!("\\x01", FixedBuf::filled(b"\x01").escape_ascii());
+        let buf = FixedBuf::filled(b"abc");
+        assert_eq!("abc", buf.escape_ascii());
+        assert_eq!(b"abc", buf.readable());
+    }
+
+    #[test]
     fn test_std_io_write() {
         let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
         std::io::Write::write(&mut buf, b"abc").unwrap();
-        assert_eq!("abc", escape_ascii(buf.readable()));
+        assert_eq!("abc", buf.escape_ascii());
         std::io::Write::write(&mut buf, b"def").unwrap();
-        assert_eq!("abcdef", escape_ascii(buf.readable()));
+        assert_eq!("abcdef", buf.escape_ascii());
         buf.read_bytes(1);
         std::io::Write::write(&mut buf, b"g").unwrap();
-        assert_eq!("bcdefg", escape_ascii(buf.readable()));
+        assert_eq!("bcdefg", buf.escape_ascii());
         std::io::Write::write(&mut buf, "h".repeat(8).as_bytes()).unwrap();
         std::io::Write::write(&mut buf, b"i").unwrap();
         assert_eq!(
@@ -1462,10 +1477,10 @@ mod tests {
         let _: FixedBuf<[u8; 16]> = FixedBuf::default();
         let mut array_buf: FixedBuf<[u8; 32]> = FixedBuf::default();
         array_buf.write_str("abc").unwrap();
-        assert_eq!("abc", escape_ascii(array_buf.readable()));
+        assert_eq!("abc", array_buf.escape_ascii());
         // Default box buf has empty slice and cannot be read or written.
         let mut box_buf: FixedBuf<Box<[u8]>> = FixedBuf::default();
-        assert_eq!("", escape_ascii(box_buf.readable()));
+        assert_eq!("", box_buf.escape_ascii());
         assert!(box_buf.writable().is_none());
         // let slice_buf: FixedBuf<&mut [u8]> = FixedBuf::default(); // compiler error
     }
