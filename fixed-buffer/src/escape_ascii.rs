@@ -12,11 +12,14 @@
 ///
 /// Example test:
 /// ```
-/// use fixed_buffer::{escape_ascii, FixedBuf};
-/// let mut buf: FixedBuf<[u8; 16]> = FixedBuf::new([0u8; 16]);
-/// buf.write_str("ab");
-/// buf.write_str("cd");
-/// assert_eq!("abcd", escape_ascii(buf.readable()));
+/// use fixed_buffer::escape_ascii;
+/// assert_eq!("abc", escape_ascii(b"abc"));
+/// assert_eq!("abc\\n", escape_ascii(b"abc\n"));
+/// assert_eq!(
+///     "Euro sign: \\xe2\\x82\\xac",
+///     escape_ascii("Euro sign: \u{20AC}".as_bytes())
+/// );
+/// assert_eq!("\\x01\\x02\\x03", escape_ascii(&[1, 2, 3]));
 /// ```
 pub fn escape_ascii(input: &[u8]) -> String {
     let mut result = String::new();
@@ -30,20 +33,20 @@ pub fn escape_ascii(input: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::super::*;
+    use super::escape_ascii;
 
     #[test]
     fn test_escape_ascii() {
-        assert_eq!("", FixedBuf::filled(b"").escape_ascii());
-        assert_eq!("abc", FixedBuf::filled(b"abc").escape_ascii());
-        assert_eq!("\\r\\n", FixedBuf::filled(b"\r\n").escape_ascii());
+        assert_eq!("", escape_ascii(b""));
+        assert_eq!("abc", escape_ascii(b"abc"));
+        assert_eq!("\\r\\n", escape_ascii(b"\r\n"));
         assert_eq!(
             "\\xe2\\x82\\xac",
-            FixedBuf::filled("€".as_bytes()).escape_ascii()
+            escape_ascii(/* Euro sign */ "\u{20AC}".as_bytes())
         );
-        assert_eq!("\\x01", FixedBuf::filled(b"\x01").escape_ascii());
-        let buf = FixedBuf::filled(b"abc");
-        assert_eq!("abc", buf.escape_ascii());
+        assert_eq!("\\x01", escape_ascii(b"\x01"));
+        let buf = escape_ascii(b"abc");
+        assert_eq!("abc", buf);
         assert_eq!(b"abc", buf.readable());
     }
 }
