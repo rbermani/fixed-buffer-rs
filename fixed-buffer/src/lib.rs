@@ -221,10 +221,10 @@ mod escape_ascii;
 pub use escape_ascii::escape_ascii;
 
 mod deframe_crlf;
-pub use deframe_crlf::*;
+pub use deframe_crlf::deframe_crlf;
 
 mod deframe_line;
-pub use deframe_line::*;
+pub use deframe_line::deframe_line;
 
 mod read_write_chain;
 pub use read_write_chain::*;
