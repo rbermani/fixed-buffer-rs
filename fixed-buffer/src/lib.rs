@@ -143,6 +143,8 @@
 //! - [arrayvec](https://crates.io/crates/arrayvec), vector with fixed capacity.
 //!
 //! # Changelog
+//! - v0.3.0 - Breaking API changes:
+//!   - Remove `Copy` impl.
 //! - v0.2.3
 //!   - Add
 //!     [`read_byte`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.read_byte),
@@ -270,7 +272,7 @@ impl MalformedInputError {
 ///
 /// `FixedBuf<Box<[u8]>>` uses less memory than `Box<FixedBuf<[u8; N]>>`.
 /// See [`new`](#method.new) for details.
-#[derive(Default, Copy, Clone, Eq, Hash, PartialEq)]
+#[derive(Default, Clone, Eq, Hash, PartialEq)]
 pub struct FixedBuf<T> {
     mem: T,
     read_index: usize,
