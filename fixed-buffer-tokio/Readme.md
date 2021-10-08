@@ -36,13 +36,12 @@ For a complete example, see
 - [tokio::io::BufReader](https://docs.rs/tokio/latest/tokio/io/struct.BufReader.html)
 - [tokio::io::BufWriter](https://docs.rs/tokio/latest/tokio/io/struct.BufWriter.html)
 
-## Release Process
-1. Edit `Cargo.toml` and bump version number.
-1. Run `../release.sh`
-
 ## Changelog
 - v0.1.1 - Add badges to readme
 - v0.1.0 - First published version
 
+## Release Process
+1. Edit `Cargo.toml` and bump version number.
+1. Run `../release.sh`
 
 License: Apache-2.0
