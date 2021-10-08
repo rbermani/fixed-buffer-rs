@@ -177,6 +177,21 @@ constructor is useful in tests.
 - v0.1.1 - First published version
 
 ## TO DO
+- Change deframer function type to allow consuming bytes without returning a block.
+- Implement async-std read & write traits
+- Add an `frame_copy_iter` function.
+  Because of borrowing rules, this function must return non-borrowed (allocated and copied) data.
+- Switch to const generics once they are stable:
+  - https://github.com/rust-lang/rust/issues/44580
+  - https://stackoverflow.com/a/56543462
+- Set up CI on:
+  - DONE - Linux x86 64-bit
+  - [macOS](https://gitlab.com/gitlab-org/gitlab/-/issues/269756)
+  - [Windows](https://about.gitlab.com/blog/2020/01/21/windows-shared-runner-beta/)
+  - https://crate-ci.github.io/pr/testing.html#travisci
+  - Linux ARM 64-bit (Raspberry Pi 3 and newer)
+  - Linux ARM 32-bit (Raspberry Pi 2)
+  - RISCV & ESP32 firmware?
 - DONE - Try to make this crate comply with the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/).
 - DONE - Find out how to include Readme.md info in the crate's docs.
 - DONE - Make the repo public
@@ -196,20 +211,6 @@ constructor is useful in tests.
 - DONE - Add and update a changelog
   - Update it manually
   - https://crate-ci.github.io/release/changelog.html
-- Implement async-std read & write traits
-- Add an `frame_copy_iter` function.
-  Because of borrowing rules, this function must return non-borrowed (allocated and copied) data.
-- Switch to const generics once they are stable:
-  - https://github.com/rust-lang/rust/issues/44580
-  - https://stackoverflow.com/a/56543462
-- Set up CI on:
-  - DONE - Linux x86 64-bit
-  - [macOS](https://gitlab.com/gitlab-org/gitlab/-/issues/269756)
-  - [Windows](https://about.gitlab.com/blog/2020/01/21/windows-shared-runner-beta/)
-  - https://crate-ci.github.io/pr/testing.html#travisci
-  - Linux ARM 64-bit (Raspberry Pi 3 and newer)
-  - Linux ARM 32-bit (Raspberry Pi 2)
-  - RISCV & ESP32 firmware?
 
 ## Release Process
 1. Edit `Cargo.toml` and bump version number.
