@@ -10,11 +10,11 @@ variables:
 
 before_script:
   - rustc --version && cargo --version
-  - du -sh cargo/ fixed-buffer/target/ fixed-buffer-tokio/target/ || true
+  - du -sh cargo/ */target/ || true
   - cargo install cargo-readme
 
 after_script:
-  - du -sh cargo/ fixed-buffer/target/ fixed-buffer-tokio/target/ || true
+  - du -sh cargo/ */target/ || true
 
 cache:
   # Increment the 'gen' number to clear the caches.
