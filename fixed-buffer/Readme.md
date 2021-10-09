@@ -137,6 +137,7 @@ constructor is useful in tests.
   - Remove `new` arg.
   - Remove `capacity`.
   - Remove `Copy` impl.
+  - Change `writable` return type to `&mut [u8]`.
 - v0.2.3
   - Add
     [`read_byte`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.read_byte),
