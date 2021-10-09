@@ -18,7 +18,7 @@
 use crc::Hasher32;
 use fixed_buffer_tokio::{AsyncFixedBuf, AsyncReadWriteChain, AsyncReadWriteTake};
 use std::io::ErrorKind;
-use std::net::{Shutdown, SocketAddr};
+use std::net::SocketAddr;
 use std::println;
 use std::task::Context;
 use std::time::Duration;
