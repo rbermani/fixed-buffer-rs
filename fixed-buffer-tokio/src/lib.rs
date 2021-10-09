@@ -115,14 +115,14 @@ impl<const SIZE: usize> AsyncFixedBuf<SIZE> {
         &mut self,
         reader: &mut R,
     ) -> Result<usize, std::io::Error> {
-        let mut writable = self.writable();
+        let writable = self.writable();
         if writable.is_empty() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "no empty space in buffer",
             ));
         };
-        let num_read = tokio::io::AsyncReadExt::read(reader, &mut writable).await?;
+        let num_read = tokio::io::AsyncReadExt::read(reader, writable).await?;
         self.wrote(num_read);
         Ok(num_read)
     }
