@@ -8,10 +8,10 @@ license = "Apache-2.0"
 name = "fixed-buffer-tokio"
 readme = "Readme.md"
 repository = "https://gitlab.com/leonhard-llc/fixed-buffer-rs"
-version = "0.1.1"
+version = "0.3.0"
 
 [dependencies]
-fixed-buffer = "^0.2.1"
+fixed-buffer = "^0.3.0"
 #fixed-buffer = { path = "../fixed-buffer" }
 tokio = { version = "0.3", features = ["io-util"] }
 

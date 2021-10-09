@@ -35,6 +35,11 @@
 //! - [tokio::io::BufWriter](https://docs.rs/tokio/latest/tokio/io/struct.BufWriter.html)
 //!
 //! # Changelog
+//! - v0.3.0 - Breaking API changes:
+//!   - Change type parameter to const buffer size. Example: `FixedBuf<1024>`.
+//!   - Remove `new` arg.
+//!   - Remove `capacity`.
+//!   - Change `writable` return type to `&mut [u8]`.
 //! - v0.1.1 - Add badges to readme
 //! - v0.1.0 - First published version
 //!
@@ -58,7 +63,7 @@ mod test_utils;
 #[cfg(test)]
 pub use test_utils::*;
 
-/// A newtime that wraps
+/// A newtype that wraps
 /// [`FixedBuf`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html)
 /// and implements
 /// [`tokio::io::AsyncRead`](https://docs.rs/tokio/latest/tokio/io/trait.AsyncRead.html)
@@ -66,39 +71,41 @@ pub use test_utils::*;
 /// [`tokio::io::AsyncWrite`](https://docs.rs/tokio/latest/tokio/io/trait.AsyncWrite.html).
 ///
 /// It also has async versions of FixedBuf's io functions.
-pub struct AsyncFixedBuf<T>(FixedBuf<T>);
+pub struct AsyncFixedBuf<const SIZE: usize>(FixedBuf<SIZE>);
 
-impl<T> AsyncFixedBuf<T> {
+impl<const SIZE: usize> AsyncFixedBuf<SIZE> {
     /// Creates a new FixedBuf and wraps it in an AsyncFixedBuf.
     ///
     /// See
     /// [`FixedBuf::new`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.new)
     /// for details.
-    pub const fn new(mem: T) -> Self {
-        AsyncFixedBuf(FixedBuf::new(mem))
+    pub const fn new() -> Self {
+        AsyncFixedBuf(FixedBuf::new())
     }
 
     /// Drops the struct and returns its internal
     /// [`FixedBuf`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html).
-    pub fn into_inner(self) -> FixedBuf<T> {
+    pub fn into_inner(self) -> FixedBuf<SIZE> {
         self.0
     }
-}
 
-impl<T: AsRef<[u8]>> AsyncFixedBuf<T> {
-    /// Creates a new FixedBuf and wraps it in an AsyncFixedBuf.
+    /// Makes a new empty buffer.
     ///
+    /// Consumes `mem` and uses it as the internal memory array.
+    /// ```
+    pub fn empty(mem: [u8; SIZE]) -> Self {
+        Self(FixedBuf::empty(mem))
+    }
+
+    /// Makes a new full buffer containing the bytes in `mem`.
     /// Reading the buffer will return the bytes in `mem`.
     ///
-    /// See
-    /// [`FixedBuf::filled`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.filled)
-    /// for details.
-    pub fn filled(mem: T) -> Self {
-        AsyncFixedBuf(FixedBuf::filled(mem))
+    /// Consumes `mem` and uses it as the internal memory array.
+    /// ```
+    pub fn filled(mem: [u8; SIZE]) -> Self {
+        Self(FixedBuf::filled(mem))
     }
-}
 
-impl<T: AsMut<[u8]>> AsyncFixedBuf<T> {
     /// Reads from `reader` once and writes the data into the buffer.
     ///
     /// Returns [`InvalidData`](std::io::ErrorKind::InvalidData)
@@ -108,18 +115,20 @@ impl<T: AsMut<[u8]>> AsyncFixedBuf<T> {
         &mut self,
         reader: &mut R,
     ) -> Result<usize, std::io::Error> {
-        let mut writable = self.writable().ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, "no empty space in buffer")
-        })?;
+        let mut writable = self.writable();
+        if writable.is_empty() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "no empty space in buffer",
+            ));
+        };
         let num_read = tokio::io::AsyncReadExt::read(reader, &mut writable).await?;
         self.wrote(num_read);
         Ok(num_read)
     }
-}
 
-impl<T: AsRef<[u8]> + AsMut<[u8]>> AsyncFixedBuf<T> {
     /// Async version of
-    /// [`FixedBuf::read_frame`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.filled).
+    /// [`FixedBuf::read_frame`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.read_frame).
     pub async fn read_frame<R, F>(
         &mut self,
         reader: &mut R,
@@ -137,9 +146,13 @@ impl<T: AsRef<[u8]> + AsMut<[u8]>> AsyncFixedBuf<T> {
                 // None case falls through.
             }
             self.shift();
-            let writable = self.writable().ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidData, "end of buffer full")
-            })?;
+            let writable = self.writable();
+            if writable.is_empty() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "end of buffer full",
+                ));
+            };
             let num_read = tokio::io::AsyncReadExt::read(reader, writable).await?;
             if num_read == 0 {
                 if self.is_empty() {
@@ -155,22 +168,22 @@ impl<T: AsRef<[u8]> + AsMut<[u8]>> AsyncFixedBuf<T> {
     }
 }
 
-impl<T> Unpin for AsyncFixedBuf<T> {}
+impl<const SIZE: usize> Unpin for AsyncFixedBuf<SIZE> {}
 
-impl<T> std::ops::Deref for AsyncFixedBuf<T> {
-    type Target = FixedBuf<T>;
+impl<const SIZE: usize> std::ops::Deref for AsyncFixedBuf<SIZE> {
+    type Target = FixedBuf<SIZE>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl<T> std::ops::DerefMut for AsyncFixedBuf<T> {
+impl<const SIZE: usize> std::ops::DerefMut for AsyncFixedBuf<SIZE> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl<T: AsRef<[u8]> + Unpin> tokio::io::AsyncRead for AsyncFixedBuf<T> {
+impl<const SIZE: usize> tokio::io::AsyncRead for AsyncFixedBuf<SIZE> {
     fn poll_read(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
@@ -185,7 +198,7 @@ impl<T: AsRef<[u8]> + Unpin> tokio::io::AsyncRead for AsyncFixedBuf<T> {
     }
 }
 
-impl<T: AsMut<[u8]>> tokio::io::AsyncWrite for AsyncFixedBuf<T> {
+impl<const SIZE: usize> tokio::io::AsyncWrite for AsyncFixedBuf<SIZE> {
     fn poll_write(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
@@ -224,7 +237,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_read_frame_empty_to_eof() {
-        let mut buf = AsyncFixedBuf::new([0u8; 8]);
+        let mut buf: AsyncFixedBuf<8> = AsyncFixedBuf::new();
         let mut reader = std::io::Cursor::new(b"");
         assert_eq!(
             None,
@@ -237,7 +250,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_read_frame_empty_to_incomplete() {
-        let mut buf = AsyncFixedBuf::new([0u8; 8]);
+        let mut buf: AsyncFixedBuf<8> = AsyncFixedBuf::new();
         let mut reader = std::io::Cursor::new(b"abc");
         assert_eq!(
             std::io::ErrorKind::UnexpectedEof,
@@ -251,7 +264,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_read_frame_empty_to_complete() {
-        let mut buf = AsyncFixedBuf::new([0u8; 8]);
+        let mut buf: AsyncFixedBuf<8> = AsyncFixedBuf::new();
         let mut reader = std::io::Cursor::new(b"abc\n");
         assert_eq!(
             "abc",
@@ -267,7 +280,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_read_frame_empty_to_complete_with_leftover() {
-        let mut buf = AsyncFixedBuf::new([0u8; 8]);
+        let mut buf: AsyncFixedBuf<8> = AsyncFixedBuf::new();
         let mut reader = std::io::Cursor::new(b"abc\nde");
         assert_eq!(
             "abc",
@@ -283,7 +296,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_read_frame_empty_to_invalid() {
-        let mut buf = AsyncFixedBuf::new([0u8; 8]);
+        let mut buf: AsyncFixedBuf<8> = AsyncFixedBuf::new();
         let mut reader = std::io::Cursor::new(b"x");
         assert_eq!(
             std::io::ErrorKind::InvalidData,
@@ -297,7 +310,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_read_frame_incomplete_to_eof() {
-        let mut buf = AsyncFixedBuf::new([0u8; 8]);
+        let mut buf: AsyncFixedBuf<8> = AsyncFixedBuf::new();
         buf.write_str("a").unwrap();
         let mut reader = std::io::Cursor::new(b"");
         assert_eq!(
@@ -312,7 +325,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_read_frame_incomplete_to_incomplete() {
-        let mut buf = AsyncFixedBuf::new([0u8; 8]);
+        let mut buf: AsyncFixedBuf<8> = AsyncFixedBuf::new();
         buf.write_str("a").unwrap();
         let mut reader = std::io::Cursor::new(b"bc");
         assert_eq!(
@@ -327,7 +340,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_read_frame_incomplete_to_complete() {
-        let mut buf = AsyncFixedBuf::new([0u8; 8]);
+        let mut buf: AsyncFixedBuf<8> = AsyncFixedBuf::new();
         buf.write_str("a").unwrap();
         let mut reader = std::io::Cursor::new(b"bc\n");
         assert_eq!(
@@ -344,7 +357,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_read_frame_incomplete_to_complete_with_leftover() {
-        let mut buf = AsyncFixedBuf::new([0u8; 8]);
+        let mut buf: AsyncFixedBuf<8> = AsyncFixedBuf::new();
         buf.write_str("a").unwrap();
         let mut reader = std::io::Cursor::new(b"bc\nde");
         assert_eq!(
@@ -361,7 +374,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_read_frame_complete_doesnt_read() {
-        let mut buf = AsyncFixedBuf::new([0u8; 8]);
+        let mut buf: AsyncFixedBuf<8> = AsyncFixedBuf::new();
         buf.write_str("abc\n").unwrap();
         assert_eq!(
             "abc",
@@ -377,7 +390,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_read_frame_complete_leaves_leftovers() {
-        let mut buf = AsyncFixedBuf::new([0u8; 8]);
+        let mut buf: AsyncFixedBuf<8> = AsyncFixedBuf::new();
         buf.write_str("abc\nde").unwrap();
         assert_eq!(
             "abc",
@@ -393,7 +406,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_read_frame_invalid_doesnt_read() {
-        let mut buf = AsyncFixedBuf::new([0u8; 8]);
+        let mut buf: AsyncFixedBuf<8> = AsyncFixedBuf::new();
         buf.write_str("x").unwrap();
         assert_eq!(
             std::io::ErrorKind::InvalidData,
@@ -407,7 +420,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_read_frame_buffer_full() {
-        let mut buf = AsyncFixedBuf::new([0u8; 8]);
+        let mut buf: AsyncFixedBuf<8> = AsyncFixedBuf::new();
         buf.write_str("abcdefgh").unwrap();
         let mut reader = std::io::Cursor::new(b"bc\nde");
         assert_eq!(
@@ -422,7 +435,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_async_read() {
-        let mut buf = AsyncFixedBuf(FixedBuf::new([0u8; 16]));
+        let mut buf: AsyncFixedBuf<16> = AsyncFixedBuf::new();
         let mut data = ['.' as u8; 16];
         assert_eq!(
             0,
@@ -464,7 +477,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_async_write() {
-        let mut buf = AsyncFixedBuf(FixedBuf::new([0u8; 16]));
+        let mut buf: AsyncFixedBuf<16> = AsyncFixedBuf::new();
         tokio::io::AsyncWriteExt::write_all(&mut buf, b"abc")
             .await
             .unwrap();

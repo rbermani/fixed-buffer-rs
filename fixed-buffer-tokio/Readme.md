@@ -37,6 +37,11 @@ For a complete example, see
 - [tokio::io::BufWriter](https://docs.rs/tokio/latest/tokio/io/struct.BufWriter.html)
 
 ## Changelog
+- v0.3.0 - Breaking API changes:
+  - Change type parameter to const buffer size. Example: `FixedBuf<1024>`.
+  - Remove `new` arg.
+  - Remove `capacity`.
+  - Change `writable` return type to `&mut [u8]`.
 - v0.1.1 - Add badges to readme
 - v0.1.0 - First published version
 

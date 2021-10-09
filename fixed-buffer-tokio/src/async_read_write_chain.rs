@@ -105,7 +105,7 @@ mod tests {
     #[tokio::test]
     async fn both_empty() {
         let mut reader = std::io::Cursor::new(b"");
-        let mut read_writer = AsyncFixedBuf::new([0u8; 8]);
+        let mut read_writer: AsyncFixedBuf<8> = AsyncFixedBuf::new();
         let mut chain = AsyncReadWriteChain::new(&mut reader, &mut read_writer);
         let mut buf = [b'.'; 8];
         assert_eq!(
@@ -152,7 +152,7 @@ mod tests {
     #[tokio::test]
     async fn reads_second_when_first_empty() {
         let mut reader = std::io::Cursor::new(b"");
-        let mut read_writer = AsyncFixedBuf::new([0u8; 4]);
+        let mut read_writer: AsyncFixedBuf<4> = AsyncFixedBuf::new();
         read_writer.write_str("abc").unwrap();
         let mut chain = AsyncReadWriteChain::new(&mut reader, &mut read_writer);
         let mut buf = [b'.'; 4];
@@ -168,7 +168,7 @@ mod tests {
     #[tokio::test]
     async fn reads_first_then_second() {
         let mut reader = std::io::Cursor::new(b"ab");
-        let mut read_writer = AsyncFixedBuf::new([0u8; 4]);
+        let mut read_writer: AsyncFixedBuf<4> = AsyncFixedBuf::new();
         read_writer.write_str("cd").unwrap();
         let mut chain = AsyncReadWriteChain::new(&mut reader, &mut read_writer);
         let mut buf = [b'.'; 4];
@@ -208,7 +208,7 @@ mod tests {
     #[tokio::test]
     async fn passes_writes_through() {
         let mut reader = std::io::Cursor::new(b"");
-        let mut read_writer = AsyncFixedBuf::new([0u8; 4]);
+        let mut read_writer: AsyncFixedBuf<4> = AsyncFixedBuf::new();
         let mut chain = AsyncReadWriteChain::new(&mut reader, &mut read_writer);
         assert_eq!(
             3,

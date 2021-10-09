@@ -94,7 +94,7 @@ impl Request {
 
 async fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), std::io::Error> {
     println!("SERVER handling connection");
-    let mut buf = AsyncFixedBuf::new([0; 4096]);
+    let mut buf: AsyncFixedBuf<4096> = AsyncFixedBuf::new();
     loop {
         let line_bytes = match buf
             .read_frame(&mut tcp_stream, fixed_buffer::deframe_line)
