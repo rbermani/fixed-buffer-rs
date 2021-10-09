@@ -53,8 +53,7 @@
 //!
 //! fn handle_conn(mut tcp_stream: TcpStream
 //! ) -> Result<(), Error> {
-//!     let mut buf: FixedBuf<[u8; 4096]> =
-//!         FixedBuf::new([0; 4096]);
+//!     let mut buf: FixedBuf<4096> = FixedBuf::new();
 //!     loop {
 //!         // Read a line
 //!         // and leave leftover bytes in `buf`.
@@ -95,8 +94,7 @@
 //!
 //! fn read_and_process<R: Read>(mut input: R)
 //!     -> Result<(), Error> {
-//!     let mut buf: FixedBuf<[u8; 1024]> =
-//!         FixedBuf::new([0; 1024]);
+//!     let mut buf: FixedBuf<1024> = FixedBuf::new();
 //!     loop {
 //!         // Read a chunk into the buffer.
 //!         if buf.copy_once_from(&mut input)? == 0 {
@@ -144,6 +142,9 @@
 //!
 //! # Changelog
 //! - v0.3.0 - Breaking API changes:
+//!   - Change type parameter to const buffer size. Example: `FixedBuf<1024>`.
+//!   - Remove `new` arg.
+//!   - Remove `capacity`.
 //!   - Remove `Copy` impl.
 //! - v0.2.3
 //!   - Add
@@ -192,9 +193,6 @@
 //! - Implement async-std read & write traits
 //! - Add an `frame_copy_iter` function.
 //!   Because of borrowing rules, this function must return non-borrowed (allocated and copied) data.
-//! - Switch to const generics once they are stable:
-//!   - https://github.com/rust-lang/rust/issues/44580
-//!   - https://stackoverflow.com/a/56543462
 //! - Set up CI on:
 //!   - DONE - Linux x86 64-bit
 //!   - [macOS](https://gitlab.com/gitlab-org/gitlab/-/issues/269756)
@@ -203,6 +201,9 @@
 //!   - Linux ARM 64-bit (Raspberry Pi 3 and newer)
 //!   - Linux ARM 32-bit (Raspberry Pi 2)
 //!   - RISCV & ESP32 firmware?
+//! - DONE - Switch to const generics once they are stable:
+//!   - https://github.com/rust-lang/rust/issues/44580
+//!   - https://stackoverflow.com/a/56543462
 //! - DONE - Try to make this crate comply with the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/).
 //! - DONE - Find out how to include Readme.md info in the crate's docs.
 //! - DONE - Make the repo public
@@ -248,10 +249,10 @@ mod test_utils;
 #[cfg(test)]
 pub use test_utils::*;
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NotEnoughSpaceError {}
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct MalformedInputError(String);
 impl MalformedInputError {
     pub fn new(msg: String) -> Self {
@@ -264,95 +265,54 @@ impl MalformedInputError {
 ///
 /// It is not a circular buffer.  Call [`shift`](#method.shift) periodically to
 /// move unread bytes to the front of the buffer.
-///
-/// Use [`new`](#method.new) to make structs:
-/// - `FixedBuf<[u8; N]>`
-/// - `FixedBuf<Box<[u8]>>`
-/// - `FixedBuf<&mut [u8]>`
-///
-/// `FixedBuf<Box<[u8]>>` uses less memory than `Box<FixedBuf<[u8; N]>>`.
-/// See [`new`](#method.new) for details.
-#[derive(Default, Clone, Eq, Hash, PartialEq)]
-pub struct FixedBuf<T> {
-    mem: T,
+#[derive(Copy, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct FixedBuf<const SIZE: usize> {
+    mem: [u8; SIZE],
     read_index: usize,
     write_index: usize,
 }
 
-impl<T> std::panic::UnwindSafe for FixedBuf<T> {}
+impl<const SIZE: usize> std::panic::UnwindSafe for FixedBuf<SIZE> {}
 
-impl<T> FixedBuf<T> {
-    /// Makes a new empty buffer, consuming or borrowing `mem`
-    /// and using it as the internal memory array.
+impl<const SIZE: usize> FixedBuf<SIZE> {
+    /// Makes a new empty buffer with space for `SIZE` bytes.
     ///
-    /// Creates `FixedBuf<[u8; N]>`, `FixedBuf<Box<[u8]>>`, and `FixedBuf<&mut [u8]>` structs.
-    ///
-    /// This function is the inverse of [`into_inner`](#method.into_inner).
-    ///
-    /// `FixedBuf<&mut [u8]>` uses borrowed memory.
-    /// Create one like this:
-    ///
-    /// ```
-    /// # use fixed_buffer::FixedBuf;
-    /// let mut mem = [0u8; 42];
-    /// let mut buf: FixedBuf<&mut [u8]> = FixedBuf::new(&mut mem);
-    /// ```
-    ///
-    /// `FixedBuf<[u8; N]>` can live on the stack.  Be careful of stack overflows!
-    /// Create one like this:
-    ///
-    /// ```
-    /// # use fixed_buffer::FixedBuf;
-    /// let mut buf: FixedBuf<[u8; 42]> = FixedBuf::new([0u8; 42]);
-    /// ```
-    ///
-    /// `FixedBuf<Box<[u8]>>` stores its memory block on the heap.
-    /// `Box` supports [coercion](https://doc.rust-lang.org/std/ops/trait.CoerceUnsized.html)
-    /// of `Box<[T; N]>` to `Box<[T]>`.  Use that to create a boxed buffer:
-    ///
-    /// ```
-    /// # use fixed_buffer::FixedBuf;
-    /// let mut buf: FixedBuf<Box<[u8]>> = FixedBuf::new(Box::new([0u8; 42]));
-    /// // Your editor may incorrectly report "mismatched types [E0308]".
-    /// ```
-    ///
-    /// Note that `FixedBuf<Box<[u8]>>` is 10-25% more memory efficient than
-    /// `Box<FixedBuf<[u8; N]>>`.  Explanation:
-    ///
-    /// Standard heaps allocate memory in blocks.  The block sizes are powers of two and
-    /// some intervening sizes.  For example,
-    /// [jemalloc's block sizes](http://jemalloc.net/jemalloc.3.html#size_classes) are
-    /// 8, 16, 32, 48, 64, 80, 96, 112, 128, 160, 192, 224, 256 bytes, and so on.
-    /// Thus jemalloc uses 160 bytes to store a 129 byte value.
-    ///
-    /// Every `FixedBuf<[u8; N]>` contains two `usize` index values
-    /// in addition to its buffer memory.
-    /// If you create a buffer with a power-of-two size,
-    /// the struct is always a few bytes larger than a power of two,
-    /// and takes up the next larger block size on the heap.
-    /// For example, in a 64-bit program using jemalloc,
-    /// Box<`FixedBuf<[u8; 128]>`> uses 128 + 8 + 8 = 144 bytes,
-    /// and gets stored in a 160 byte block, wasting an extra 11% of memory.
-    ///
-    /// By comparison, `FixedBuf<Box<[u8]>>` keeps the buffer memory separate
-    /// from the index values and therefore wastes no memory.
-    /// This is because `Box<[u8; 128]>` uses exactly 128-bytes on the heap.
-    ///
-    /// Run the program
-    /// [`box_benchmark/box_benchmark.rs`](https://gitlab.com/leonhard-llc/fixed-buffer-rs/-/blob/main/fixed-buffer/box_benchmark/box_benchmark.rs)
-    /// to see the memory usage difference.
-    pub const fn new(mem: T) -> Self {
+    /// Be careful of stack overflows!
+    pub const fn new() -> Self {
         Self {
-            mem,
+            mem: [0_u8; SIZE],
             write_index: 0,
             read_index: 0,
         }
     }
 
-    /// Drops the struct and returns its internal array.
+    /// Makes a new empty buffer.
     ///
-    /// This function is the inverse of [`new`](#method.new).
-    pub fn into_inner(self) -> T {
+    /// Consumes `mem` and uses it as the internal memory array.
+    /// ```
+    pub fn empty(mem: [u8; SIZE]) -> Self {
+        Self {
+            mem,
+            read_index: 0,
+            write_index: 0,
+        }
+    }
+
+    /// Makes a new full buffer containing the bytes in `mem`.
+    /// Reading the buffer will return the bytes in `mem`.
+    ///
+    /// Consumes `mem` and uses it as the internal memory array.
+    /// ```
+    pub fn filled(mem: [u8; SIZE]) -> Self {
+        Self {
+            mem,
+            read_index: 0,
+            write_index: SIZE,
+        }
+    }
+
+    /// Drops the struct and returns its internal array.
+    pub fn into_inner(self) -> [u8; SIZE] {
         self.mem
     }
 
@@ -361,7 +321,7 @@ impl<T> FixedBuf<T> {
     /// Example:
     /// ```
     /// # use fixed_buffer::FixedBuf;
-    /// let mut buf: FixedBuf<[u8; 16]> = FixedBuf::new([0u8; 16]);
+    /// let mut buf: FixedBuf<16> = FixedBuf::new();
     /// assert_eq!(0, buf.len());
     /// buf.write_str("abc");
     /// assert_eq!(3, buf.len());
@@ -381,7 +341,7 @@ impl<T> FixedBuf<T> {
     /// Example:
     /// ```
     /// # use fixed_buffer::FixedBuf;
-    /// let mut buf: FixedBuf<[u8; 16]> = FixedBuf::new([0u8; 16]);
+    /// let mut buf: FixedBuf<16> = FixedBuf::new();
     /// assert!(buf.is_empty());
     /// buf.write_str("abc").unwrap();
     /// assert!(!buf.is_empty());
@@ -397,56 +357,10 @@ impl<T> FixedBuf<T> {
         self.read_index = 0;
         self.write_index = 0;
     }
-}
-
-impl<T: AsRef<[u8]>> FixedBuf<T> {
-    /// Makes a new full buffer, consuming or borrowing `mem`
-    /// and using it as the internal memory array.
-    /// Reading the buffer will return the bytes in `mem`.
-    ///
-    /// You can write to the returned buf if `mem` implements `AsMut<[u8]`.
-    ///
-    /// For details, see [`new`](#method.new).
-    ///
-    /// Examples:
-    /// ```
-    /// # use fixed_buffer::FixedBuf;
-    /// // Readable, not writable:
-    /// let mut buf1 = FixedBuf::filled(b"abc");
-    ///
-    /// // Readable and writable:
-    /// let mut buf2 = FixedBuf::filled([0u8; 42]);
-    /// let mut buf3: FixedBuf<[u8; 42]> = FixedBuf::filled([0u8; 42]);
-    /// let mut buf4: FixedBuf<Box<[u8]>> = FixedBuf::filled(Box::new([0u8; 42]));
-    /// // Your editor may incorrectly report "mismatched types [E0308]" --^
-    /// ```
-    pub fn filled(mem: T) -> Self {
-        Self {
-            write_index: mem.as_ref().len(),
-            read_index: 0,
-            mem,
-        }
-    }
-
-    /// Returns the maximum number of bytes that can be stored in the buffer.
-    ///
-    /// Example:
-    /// ```
-    /// # use fixed_buffer::FixedBuf;
-    /// let mut buf: FixedBuf<[u8; 16]> = FixedBuf::new([0u8; 16]);
-    /// assert_eq!(16, buf.capacity());
-    /// buf.write_str("abc").unwrap();
-    /// assert_eq!(16, buf.capacity());
-    /// ```
-    pub fn capacity(&self) -> usize {
-        self.mem.as_ref().len()
-    }
 
     /// Copies all readable bytes to a string.
     /// Includes printable ASCII characters as-is.
     /// Converts non-printable characters to strings like "\n" and "\x19".
-    ///
-    /// Leaves the buffer unchanged.
     ///
     /// Uses
     /// [`core::ascii::escape_default`](https://doc.rust-lang.org/core/ascii/fn.escape_default.html
@@ -457,7 +371,7 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
     /// Example test:
     /// ```
     /// use fixed_buffer::FixedBuf;
-    /// let mut buf = FixedBuf::new([0u8; 16]);
+    /// let mut buf: FixedBuf<8> = FixedBuf::new();
     /// buf.write_str("abc");
     /// buf.write_str("€");
     /// assert_eq!("abc\\xe2\\x82\\xac", buf.escape_ascii());
@@ -466,9 +380,8 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
         escape_ascii(self.readable())
     }
 
-    /// This is a low-level function.
-    ///
     /// Borrows the entire internal memory buffer.
+    /// This is a low-level function.
     pub fn mem(&self) -> &[u8] {
         self.mem.as_ref()
     }
@@ -586,10 +499,9 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
     ///
     /// Undoes any reads that `f` made to the buffer if it returns `None`.
     ///
-    /// `f` cannot borrow from the buffer.
-    /// We don't know how to write a safe `try_parse` method
-    /// that lets `f` borrow from the buffer.
-    /// If you know how, please send us a change or file an issue with details.
+    /// `f` should not write to the buffer.
+    /// If `f` writes to the buffer and then returns `None`,
+    /// the buffer's contents will become corrupted.
     ///
     /// # Example
     /// ```
@@ -610,7 +522,7 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
     /// #     ][..],
     /// #     // b"\x101234567890ABCDEF" // BufferFull
     /// # ];
-    /// # let mut read_input = |buf: &mut FixedBuf<[u8; 16]>| {
+    /// # let mut read_input = |buf: &mut FixedBuf<16>| {
     /// #     if input.is_empty() {
     /// #         return Err(ParseError::EOF);
     /// #     }
@@ -631,11 +543,11 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
     /// # let mut output: Vec<String> = Vec::new();
     /// # let mut process_record = |record| { output.push(record); Ok(()) };
     ///
-    /// fn parse_record(buf: &mut FixedBuf<&[u8]>)
+    /// fn parse_record<const SIZE: usize>(buf: &mut FixedBuf<SIZE>)
     /// -> Option<Result<String, ParseError>>
     /// {
     ///     let len = buf.try_read_byte()? as usize;
-    ///     if len > 16 {
+    ///     if len > SIZE - 1 {
     ///         return Some(Err(ParseError::TooLong));
     ///     }
     ///     let bytes = buf.try_read_bytes(len)?.to_vec();
@@ -643,9 +555,10 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
     ///         .map_err(|_| ParseError::NotUtf8))
     /// }
     ///
-    /// let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+    /// let mut buf: FixedBuf<16> = FixedBuf::new();
     /// loop {
     ///     // Try reading bytes into the buffer.
+    ///     // TODO: Clarify this example.
     ///     match read_input(&mut buf) {
     ///         Err(ParseError::EOF) if buf.is_empty() => break,
     ///         result => result?,
@@ -667,19 +580,19 @@ impl<T: AsRef<[u8]>> FixedBuf<T> {
     /// ```
     pub fn try_parse<R, F>(&mut self, f: F) -> Option<R>
     where
-        F: FnOnce(&mut FixedBuf<&[u8]>) -> Option<R>,
+        F: FnOnce(&mut FixedBuf<SIZE>) -> Option<R>,
     {
-        let mut ro_buf = FixedBuf::filled(self.readable());
-        let result = f(&mut ro_buf);
-        if result.is_some() {
-            let num_bytes_read = ro_buf.capacity() - ro_buf.len();
-            self.read_bytes(num_bytes_read);
+        let original_read_index = self.read_index;
+        let original_write_index = self.write_index;
+        if let Some(value) = f(self) {
+            Some(value)
+        } else {
+            self.read_index = original_read_index;
+            self.write_index = original_write_index;
+            None
         }
-        result
     }
-}
 
-impl<T: AsMut<[u8]>> FixedBuf<T> {
     /// Reads from `reader` once and writes the data into the buffer.
     ///
     /// Returns [`InvalidData`](std::io::ErrorKind::InvalidData)
@@ -699,7 +612,7 @@ impl<T: AsMut<[u8]>> FixedBuf<T> {
 
     /// Writes `s` into the buffer, after any unread bytes.
     ///
-    /// Returns [`Err`] if the buffer doesn't have enough free space at the end
+    /// Returns `Err` if the buffer doesn't have enough free space at the end
     /// for the whole string.
     ///
     /// See [`shift`](#method.shift).
@@ -707,16 +620,13 @@ impl<T: AsMut<[u8]>> FixedBuf<T> {
     /// Example:
     /// ```
     /// # use fixed_buffer::{escape_ascii, FixedBuf};
-    /// let mut buf: FixedBuf<[u8; 8]> = FixedBuf::new([0u8; 8]);
+    /// let mut buf: FixedBuf<8> = FixedBuf::new();
     /// buf.write_str("123").unwrap();
     /// buf.write_str("456").unwrap();
-    /// assert_eq!("1234", escape_ascii(buf.read_bytes(4)));
+    /// assert_eq!("123456", buf.escape_ascii());
     /// buf.write_str("78").unwrap();
     /// buf.write_str("9").unwrap_err();  // End of buffer is full.
     /// ```
-    ///
-    /// [`Ok`]: https://doc.rust-lang.org/std/result/enum.Result.html#variant.Ok
-    /// [`shift`]: #method.shift
     pub fn write_str(&mut self, s: &str) -> Result<(), NotEnoughSpaceError> {
         self.write_bytes(s.as_bytes()).map(|_| ())
     }
@@ -725,7 +635,7 @@ impl<T: AsMut<[u8]>> FixedBuf<T> {
     ///
     /// Returns `Ok(data.len())` if it wrote all of the bytes.
     ///
-    /// Returns [`NotEnoughSpaceError`]
+    /// Returns `NotEnoughSpaceError`
     /// if the buffer doesn't have enough free space at the end for all of the bytes.
     ///
     /// See [`shift`](#method.shift).
@@ -733,15 +643,15 @@ impl<T: AsMut<[u8]>> FixedBuf<T> {
     /// Example:
     /// ```
     /// # use fixed_buffer::{escape_ascii, FixedBuf};
-    /// let mut buf: FixedBuf<[u8; 8]> = FixedBuf::new([0u8; 8]);
-    /// assert_eq!(3 as usize, buf.write_bytes("123".as_bytes()).unwrap());
-    /// assert_eq!(3 as usize, buf.write_bytes("456".as_bytes()).unwrap());
-    /// assert_eq!("1234", escape_ascii(buf.read_bytes(4)));
-    /// assert_eq!(2 as usize, buf.write_bytes("78".as_bytes()).unwrap());  // Fills buffer.
+    /// let mut buf: FixedBuf<8> = FixedBuf::new();
+    /// assert_eq!(3, buf.write_bytes("123".as_bytes()).unwrap());
+    /// assert_eq!(3, buf.write_bytes("456".as_bytes()).unwrap());
+    /// assert_eq!("123456", buf.escape_ascii());
+    /// assert_eq!(2, buf.write_bytes("78".as_bytes()).unwrap());  // Fills buffer.
     /// buf.write_bytes("9".as_bytes()).unwrap_err();  // Error, buffer is full.
     /// ```
     pub fn write_bytes(&mut self, data: &[u8]) -> core::result::Result<usize, NotEnoughSpaceError> {
-        let writable = self.writable().ok_or_else(|| NotEnoughSpaceError {})?;
+        let writable = self.writable().ok_or(NotEnoughSpaceError {})?;
         if writable.len() < data.len() {
             return Err(NotEnoughSpaceError {});
         }
@@ -757,8 +667,8 @@ impl<T: AsMut<[u8]>> FixedBuf<T> {
     /// Then call [`wrote(usize)`](#method.wrote)
     /// to commit those bytes into the buffer and make them available for reading.
     ///
-    /// Returns [`None`](https://doc.rust-lang.org/std/option/enum.Option.html)
-    /// when the end of the buffer is full.
+    /// Returns `None` when the end of the buffer is full.
+    ///
     /// See [`shift`](#method.shift).
     ///
     /// This is a low-level method.
@@ -772,12 +682,13 @@ impl<T: AsMut<[u8]>> FixedBuf<T> {
     /// Example:
     /// ```
     /// # use fixed_buffer::{escape_ascii, FixedBuf};
-    /// let mut buf: FixedBuf<[u8; 8]> = FixedBuf::new([0u8; 8]);
-    /// buf.writable().unwrap()[0] = 'a' as u8;
-    /// buf.writable().unwrap()[1] = 'b' as u8;
-    /// buf.writable().unwrap()[2] = 'c' as u8;
+    /// let mut buf: FixedBuf<8> = FixedBuf::new();
+    /// let writable = buf.writable().unwrap();
+    /// writable[0] = 'a' as u8;
+    /// writable[1] = 'b' as u8;
+    /// writable[2] = 'c' as u8;
     /// buf.wrote(3);
-    /// assert_eq!("abc", escape_ascii(buf.read_bytes(3)));
+    /// assert_eq!("abc", buf.escape_ascii());
     /// ```
     pub fn writable(&mut self) -> Option<&mut [u8]> {
         if self.write_index >= self.mem.as_mut().len() {
@@ -830,17 +741,16 @@ impl<T: AsMut<[u8]>> FixedBuf<T> {
         self.write_index -= self.read_index;
         self.read_index = 0;
     }
-}
 
-impl<T: AsRef<[u8]> + AsMut<[u8]>> FixedBuf<T> {
     /// This is a low-level function.
     /// Use [`read_frame`](#method.read_frame) instead.
     ///
     /// Calls `deframer_fn` to check if the buffer contains a complete frame.
     /// Consumes the frame bytes from the buffer
     /// and returns the range of the frame's contents in the internal memory.
+    ///
     /// Use [`mem`](#method.mem) to immutably borrow the internal memory and
-    /// construct the slice with `&mem()[range]`.
+    /// construct the slice with `&buf.mem()[range]`.
     /// This is necessary because `deframe` borrows `self` mutably but
     /// `read_frame` needs to borrow it immutably and return a slice.
     ///
@@ -897,13 +807,28 @@ impl<T: AsRef<[u8]> + AsMut<[u8]>> FixedBuf<T> {
     /// # Example
     /// ```
     /// # use fixed_buffer::{escape_ascii, FixedBuf, deframe_line};
-    /// let mut buf: FixedBuf<[u8; 32]> = FixedBuf::new([0u8; 32]);
+    /// let mut buf: FixedBuf<32> = FixedBuf::new();
     /// let mut input = std::io::Cursor::new(b"aaa\r\nbbb\n\nccc\n");
-    /// assert_eq!("aaa", escape_ascii(buf.read_frame(&mut input, deframe_line).unwrap().unwrap()));
-    /// assert_eq!("bbb", escape_ascii(buf.read_frame(&mut input, deframe_line).unwrap().unwrap()));
-    /// assert_eq!("", escape_ascii(buf.read_frame(&mut input, deframe_line).unwrap().unwrap()));
-    /// assert_eq!("ccc", escape_ascii(buf.read_frame(&mut input, deframe_line).unwrap().unwrap()));
-    /// assert_eq!(None, buf.read_frame(&mut input, deframe_line).unwrap());
+    /// # let mut output: Vec<String> = Vec::new();
+    /// loop {
+    ///   if let Some(line) =
+    ///       buf.read_frame(&mut input, deframe_line).unwrap() {
+    ///     println!("{}", escape_ascii(line));
+    /// #   output.push(escape_ascii(line));
+    ///   } else {
+    ///     // EOF.
+    ///     break;
+    ///   }
+    /// }
+    /// // Prints:
+    /// // aaa
+    /// // bbb
+    /// //
+    /// // ccc
+    /// # assert_eq!(
+    /// #     vec!["aaa".to_string(), "bbb".to_string(),"".to_string(), "ccc".to_string()],
+    /// #     output
+    /// # );
     /// ```
     ///
     /// # Deframer Function `deframe_fn`
@@ -984,7 +909,7 @@ impl<T: AsRef<[u8]> + AsMut<[u8]>> FixedBuf<T> {
     }
 }
 
-impl<T: AsMut<[u8]>> std::io::Write for FixedBuf<T> {
+impl<const SIZE: usize> std::io::Write for FixedBuf<SIZE> {
     fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
         self.write_bytes(data).map_err(|_| {
             std::io::Error::new(
@@ -999,7 +924,7 @@ impl<T: AsMut<[u8]>> std::io::Write for FixedBuf<T> {
     }
 }
 
-impl<T: AsRef<[u8]>> std::io::Read for FixedBuf<T> {
+impl<const SIZE: usize> std::io::Read for FixedBuf<SIZE> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         Ok(self.read_and_copy_bytes(buf))
     }
@@ -1009,11 +934,18 @@ impl<T: AsRef<[u8]>> core::fmt::Debug for FixedBuf<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::result::Result<(), core::fmt::Error> {
         write!(
             f,
-            "FixedBuf{{{} writable, {} readable: \"{}\"}}",
-            self.capacity() - self.write_index,
+            "FixedBuf<{}>{{{} writable, {} readable: \"{}\"}}",
+            SIZE,
+            SIZE - self.write_index,
             self.len(),
             self.escape_ascii()
         )
+    }
+}
+
+impl<const SIZE: usize> Default for FixedBuf<SIZE> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1023,8 +955,8 @@ mod tests {
     use once_cell::sync::Lazy;
     use std::sync::Mutex;
 
-    static STATIC_FIXED_BUF: Lazy<Mutex<FixedBuf<[u8; 128 * 1024]>>> =
-        Lazy::new(|| Mutex::new(FixedBuf::new([0; 128 * 1024])));
+    static STATIC_FIXED_BUF: Lazy<Mutex<FixedBuf<131072>>> =
+        Lazy::new(|| Mutex::new(FixedBuf::new()));
 
     fn deframe_line_reject_xs(
         data: &[u8],
@@ -1045,96 +977,44 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let _: FixedBuf<[u8; 1]> = FixedBuf::new([0; 1]);
-        let _: FixedBuf<[u8; 42]> = FixedBuf::new([0; 42]);
-        let _: FixedBuf<[u8; 256 * 1024]> = FixedBuf::new([0; 256 * 1024]);
+        let buf: FixedBuf<1> = FixedBuf::new();
+        assert_eq!("", buf.escape_ascii());
+        let _: FixedBuf<42> = FixedBuf::new();
+        let _: FixedBuf<262144> = FixedBuf::new();
         // Larger sizes will overflow the stack.
     }
 
     #[test]
-    fn test_new_box_slice() {
-        let _: FixedBuf<Box<[u8]>> = FixedBuf::new(Box::new([0; 1]));
-        let _: FixedBuf<Box<[u8]>> = FixedBuf::new(Box::new([0; 42]));
-        let _: FixedBuf<Box<[u8]>> = FixedBuf::new(Box::new([0; 512 * 1024]));
-        // Larger sizes will overflow the stack.
+    fn test_empty() {
+        let mut buf: FixedBuf<8> = FixedBuf::empty([48_u8; 8] /* "aaaaaaaa" */);
+        assert_eq!("", buf.escape_ascii());
+        buf.write_str("aaaa").unwrap();
+        assert_eq!("aaaa", buf.escape_ascii());
+        buf.write_str("bbbb").unwrap();
+        assert_eq!("aaaabbbb", buf.escape_ascii());
     }
 
     #[test]
-    fn test_array_constructors() {
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
-        buf.write_str("abc").unwrap();
-        assert_eq!("abc", buf.escape_ascii());
-        let mem: [u8; 16] = buf.into_inner();
-        buf = FixedBuf::new(mem);
-        assert_eq!("", buf.escape_ascii());
-        buf.wrote(3);
-        assert_eq!("abc", escape_ascii(buf.read_all()));
-        assert_eq!("", buf.escape_ascii());
+    fn test_filled() {
+        let mut buf: FixedBuf<8> = FixedBuf::filled([97_u8; 8] /* "aaaaaaaa" */);
+        assert_eq!("aaaaaaaa", buf.escape_ascii());
+        buf.read_byte();
+        buf.shift();
+        buf.write_str("b").unwrap();
+        assert_eq!("aaaaaaab", buf.escape_ascii());
     }
 
     #[test]
-    fn test_box_array_constructors() {
-        let mut buf: FixedBuf<Box<[u8]>> = FixedBuf::new(Box::new([0u8; 16]) as Box<[u8]>);
+    fn test_into_inner() {
+        let mut buf: FixedBuf<8> = FixedBuf::new();
         buf.write_str("abc").unwrap();
-        assert_eq!("abc", buf.escape_ascii());
         let mem = buf.into_inner();
-        buf = FixedBuf::new(mem);
-        assert_eq!("", buf.escape_ascii());
-        buf.wrote(3);
-        assert_eq!("abc", escape_ascii(buf.read_all()));
-        assert_eq!("", buf.escape_ascii());
-    }
-
-    #[test]
-    fn test_slice_constructor() {
-        let mut mem = [0u8; 15];
-        let mut buf = FixedBuf::new(&mut mem);
-        buf.write_str("abc").unwrap();
-        assert_eq!("abc", buf.escape_ascii());
-        buf = FixedBuf::new(&mut mem);
-        assert_eq!("", buf.escape_ascii());
-        buf.wrote(3);
-        assert_eq!("abc", escape_ascii(buf.read_all()));
-        assert_eq!("", buf.escape_ascii());
-    }
-
-    #[test]
-    fn test_filled_const() {
-        let mut buf = FixedBuf::filled(b"abc");
-        assert_eq!("abc", escape_ascii(buf.read_all()));
-    }
-
-    #[test]
-    fn test_filled_array() {
-        let mut buf = FixedBuf::filled([7u8; 10]);
-        assert_eq!(&[7], buf.read_bytes(1));
-        buf.write_bytes(&[42u8]).unwrap_err();
-        buf.shift();
-        buf.write_bytes(&[42u8]).unwrap();
-    }
-
-    #[test]
-    fn test_filled_box_array() {
-        let mut buf: FixedBuf<Box<[u8]>> = FixedBuf::filled(Box::new([7u8; 10]));
-        assert_eq!(&[7], buf.read_bytes(1));
-        buf.write_bytes(&[42u8]).unwrap_err();
-        buf.shift();
-        buf.write_bytes(&[42u8]).unwrap();
-    }
-
-    #[test]
-    fn empty() {
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
-        assert_eq!("", buf.escape_ascii());
-        assert_eq!("", escape_ascii(buf.read_all()));
-        buf.shift();
-        assert_eq!("", buf.escape_ascii());
-        assert_eq!("", escape_ascii(buf.read_all()));
+        assert_eq!(&[97_u8, 98, 99, 0, 0, 0, 0, 0], &mem);
     }
 
     #[test]
     fn test_len() {
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut buf: FixedBuf<16> = FixedBuf::new();
         assert_eq!(0, buf.len());
         buf.write_str("abc").unwrap();
         assert_eq!(3, buf.len());
@@ -1148,7 +1028,7 @@ mod tests {
 
     #[test]
     fn test_is_empty() {
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut buf: FixedBuf<16> = FixedBuf::new();
         assert!(buf.is_empty());
         buf.write_str("abc").unwrap();
         assert!(!buf.is_empty());
@@ -1158,7 +1038,8 @@ mod tests {
 
     #[test]
     fn test_clear() {
-        let mut buf = FixedBuf::filled(b"abc");
+        let mut buf: FixedBuf<16> = FixedBuf::new();
+        buf.write_str("abc").unwrap();
         assert_eq!(3, buf.len());
         buf.clear();
         assert!(buf.is_empty());
@@ -1166,11 +1047,12 @@ mod tests {
 
     #[test]
     fn test_write_str() {
-        let mut buf: FixedBuf<[u8; 4]> = FixedBuf::default();
+        let mut buf: FixedBuf<4> = FixedBuf::new();
         buf.write_str("a").unwrap();
         buf.write_str("bc").unwrap();
         assert_eq!("abc", buf.escape_ascii());
         assert_eq!(Err(NotEnoughSpaceError {}), buf.write_str("de"));
+        assert_eq!("abc", buf.escape_ascii());
         buf.write_str("d").unwrap();
         assert_eq!("abcd", buf.escape_ascii());
         assert_eq!(Err(NotEnoughSpaceError {}), buf.write_str("e"));
@@ -1178,7 +1060,7 @@ mod tests {
 
     #[test]
     fn test_write_bytes() {
-        let mut buf: FixedBuf<[u8; 4]> = FixedBuf::default();
+        let mut buf: FixedBuf<4> = FixedBuf::new();
         assert_eq!(Ok(1usize), buf.write_bytes(b"a"));
         assert_eq!(Ok(2), buf.write_bytes(b"bc"));
         assert_eq!("abc", buf.escape_ascii());
@@ -1190,7 +1072,7 @@ mod tests {
 
     #[test]
     fn test_writable_and_wrote() {
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut buf: FixedBuf<16> = FixedBuf::new();
         assert_eq!(16, buf.writable().unwrap().len());
         buf.writable().unwrap()[0] = 'a' as u8;
         buf.wrote(1);
@@ -1206,13 +1088,13 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_wrote_too_much() {
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut buf: FixedBuf<16> = FixedBuf::new();
         buf.wrote(17);
     }
 
     #[test]
     fn test_shift_empty() {
-        let mut buf: FixedBuf<[u8; 4]> = FixedBuf::default();
+        let mut buf: FixedBuf<4> = FixedBuf::new();
         buf.shift();
         buf.write_str("abcd").unwrap();
         assert_eq!("abcd", buf.escape_ascii());
@@ -1220,7 +1102,7 @@ mod tests {
 
     #[test]
     fn test_shift_half_filled() {
-        let mut buf: FixedBuf<[u8; 6]> = FixedBuf::default();
+        let mut buf: FixedBuf<6> = FixedBuf::new();
         buf.write_str("abcd").unwrap();
         buf.shift();
         buf.read_bytes(2);
@@ -1233,7 +1115,7 @@ mod tests {
 
     #[test]
     fn test_shift_full() {
-        let mut buf: FixedBuf<[u8; 4]> = FixedBuf::default();
+        let mut buf: FixedBuf<4> = FixedBuf::new();
         buf.write_str("abcd").unwrap();
         buf.shift();
         buf.read_bytes(2);
@@ -1247,7 +1129,7 @@ mod tests {
 
     #[test]
     fn test_shift_read_all() {
-        let mut buf: FixedBuf<[u8; 4]> = FixedBuf::default();
+        let mut buf: FixedBuf<4> = FixedBuf::new();
         buf.write_str("abcd").unwrap();
         buf.read_bytes(4);
         buf.shift();
@@ -1257,7 +1139,7 @@ mod tests {
 
     #[test]
     fn test_deframe() {
-        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        let mut buf: FixedBuf<8> = FixedBuf::new();
         // Empty
         assert_eq!(None, buf.deframe(deframe_line_reject_xs).unwrap());
         // Incomplete
@@ -1278,7 +1160,7 @@ mod tests {
 
     #[test]
     fn test_read_frame_empty_to_eof() {
-        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        let mut buf: FixedBuf<8> = FixedBuf::new();
         let mut reader = std::io::Cursor::new(b"");
         assert_eq!(
             None,
@@ -1289,7 +1171,7 @@ mod tests {
 
     #[test]
     fn test_read_frame_empty_to_incomplete() {
-        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        let mut buf: FixedBuf<8> = FixedBuf::new();
         let mut reader = std::io::Cursor::new(b"abc");
         assert_eq!(
             std::io::ErrorKind::UnexpectedEof,
@@ -1302,7 +1184,7 @@ mod tests {
 
     #[test]
     fn test_read_frame_empty_to_complete() {
-        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        let mut buf: FixedBuf<8> = FixedBuf::new();
         let mut reader = std::io::Cursor::new(b"abc\n");
         assert_eq!(
             "abc",
@@ -1317,7 +1199,7 @@ mod tests {
 
     #[test]
     fn test_read_frame_empty_to_complete_with_leftover() {
-        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        let mut buf: FixedBuf<8> = FixedBuf::new();
         let mut reader = std::io::Cursor::new(b"abc\nde");
         assert_eq!(
             "abc",
@@ -1332,7 +1214,7 @@ mod tests {
 
     #[test]
     fn test_read_frame_empty_to_invalid() {
-        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        let mut buf: FixedBuf<8> = FixedBuf::new();
         let mut reader = std::io::Cursor::new(b"x");
         assert_eq!(
             std::io::ErrorKind::InvalidData,
@@ -1345,7 +1227,7 @@ mod tests {
 
     #[test]
     fn test_read_frame_incomplete_to_eof() {
-        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        let mut buf: FixedBuf<8> = FixedBuf::new();
         buf.write_str("a").unwrap();
         let mut reader = std::io::Cursor::new(b"");
         assert_eq!(
@@ -1359,7 +1241,7 @@ mod tests {
 
     #[test]
     fn test_read_frame_incomplete_to_incomplete() {
-        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        let mut buf: FixedBuf<8> = FixedBuf::new();
         buf.write_str("a").unwrap();
         let mut reader = std::io::Cursor::new(b"bc");
         assert_eq!(
@@ -1373,7 +1255,7 @@ mod tests {
 
     #[test]
     fn test_read_frame_incomplete_to_complete() {
-        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        let mut buf: FixedBuf<8> = FixedBuf::new();
         buf.write_str("a").unwrap();
         let mut reader = std::io::Cursor::new(b"bc\n");
         assert_eq!(
@@ -1389,7 +1271,7 @@ mod tests {
 
     #[test]
     fn test_read_frame_incomplete_to_complete_with_leftover() {
-        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        let mut buf: FixedBuf<8> = FixedBuf::new();
         buf.write_str("a").unwrap();
         let mut reader = std::io::Cursor::new(b"bc\nde");
         assert_eq!(
@@ -1405,7 +1287,7 @@ mod tests {
 
     #[test]
     fn test_read_frame_complete_doesnt_read() {
-        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        let mut buf: FixedBuf<8> = FixedBuf::new();
         buf.write_str("abc\n").unwrap();
         assert_eq!(
             "abc",
@@ -1420,7 +1302,7 @@ mod tests {
 
     #[test]
     fn test_read_frame_complete_leaves_leftovers() {
-        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        let mut buf: FixedBuf<8> = FixedBuf::new();
         buf.write_str("abc\nde").unwrap();
         assert_eq!(
             "abc",
@@ -1435,7 +1317,7 @@ mod tests {
 
     #[test]
     fn test_read_frame_invalid_doesnt_read() {
-        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        let mut buf: FixedBuf<8> = FixedBuf::new();
         buf.write_str("x").unwrap();
         assert_eq!(
             std::io::ErrorKind::InvalidData,
@@ -1448,7 +1330,7 @@ mod tests {
 
     #[test]
     fn test_read_frame_buffer_full() {
-        let mut buf: FixedBuf<[u8; 8]> = FixedBuf::default();
+        let mut buf: FixedBuf<8> = FixedBuf::new();
         buf.write_str("abcdefgh").unwrap();
         let mut reader = std::io::Cursor::new(b"bc\nde");
         assert_eq!(
@@ -1462,7 +1344,7 @@ mod tests {
 
     #[test]
     fn test_readable() {
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut buf: FixedBuf<16> = FixedBuf::new();
         assert_eq!("", escape_ascii(buf.readable()));
         buf.write_str("abc").unwrap();
         assert_eq!("abc", escape_ascii(buf.readable()));
@@ -1478,7 +1360,8 @@ mod tests {
 
     #[test]
     fn test_read_byte() {
-        let mut buf = FixedBuf::filled(b"abc");
+        let mut buf: FixedBuf<8> = FixedBuf::new();
+        buf.write_str("abc").unwrap();
         assert_eq!(b'a', buf.read_byte());
         assert_eq!("bc", buf.escape_ascii());
         assert_eq!(b'b', buf.read_byte());
@@ -1489,7 +1372,7 @@ mod tests {
 
     #[test]
     fn test_read_byte_mut() {
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut buf: FixedBuf<16> = FixedBuf::new();
         assert_eq!("", buf.escape_ascii());
         buf.write_str("ab").unwrap();
         assert_eq!(b'a', buf.read_byte());
@@ -1508,7 +1391,8 @@ mod tests {
 
     #[test]
     fn test_read_bytes() {
-        let mut buf = FixedBuf::filled("abc");
+        let mut buf: FixedBuf<8> = FixedBuf::new();
+        buf.write_str("abc").unwrap();
         assert_eq!("a", escape_ascii(buf.read_bytes(1)));
         assert_eq!("bc", buf.escape_ascii());
         assert_eq!("bc", escape_ascii(buf.read_bytes(2)));
@@ -1517,7 +1401,7 @@ mod tests {
 
     #[test]
     fn test_read_bytes_mut() {
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut buf: FixedBuf<16> = FixedBuf::new();
         buf.write_str("abc").unwrap();
         assert_eq!("a", escape_ascii(buf.read_bytes(1)));
         assert_eq!("bc", buf.escape_ascii());
@@ -1533,14 +1417,15 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_read_bytes_underflow() {
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut buf: FixedBuf<16> = FixedBuf::new();
         buf.write_str("a").unwrap();
         buf.read_bytes(2);
     }
 
     #[test]
     fn test_try_read_bytes() {
-        let mut buf = FixedBuf::filled(b"abc");
+        let mut buf: FixedBuf<8> = FixedBuf::new();
+        buf.write_str("abc").unwrap();
         assert_eq!(Some("a".as_bytes()), buf.try_read_bytes(1));
         assert_eq!("bc", buf.escape_ascii());
         assert_eq!(None, buf.try_read_bytes(3));
@@ -1553,7 +1438,7 @@ mod tests {
 
     #[test]
     fn test_try_read_bytes_mut() {
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut buf: FixedBuf<16> = FixedBuf::new();
         buf.write_str("abc").unwrap();
         assert_eq!(Some("a".as_bytes()), buf.try_read_bytes(1));
         assert_eq!("bc", buf.escape_ascii());
@@ -1572,7 +1457,7 @@ mod tests {
 
     #[test]
     fn test_read_all() {
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut buf: FixedBuf<16> = FixedBuf::new();
         assert_eq!("", escape_ascii(buf.read_all()));
         buf.write_str("abc").unwrap();
         assert_eq!("abc", escape_ascii(buf.read_all()));
@@ -1583,7 +1468,8 @@ mod tests {
 
     #[test]
     fn test_read_and_copy_bytes() {
-        let mut buf = FixedBuf::filled("abc");
+        let mut buf: FixedBuf<8> = FixedBuf::new();
+        buf.write_str("abc").unwrap();
         let mut one = [0_u8; 1];
         assert_eq!(1, buf.read_and_copy_bytes(&mut one));
         assert_eq!(b"a", &one);
@@ -1596,7 +1482,7 @@ mod tests {
 
     #[test]
     fn test_read_and_copy_bytes_mut() {
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut buf: FixedBuf<16> = FixedBuf::new();
         buf.write_str("abc").unwrap();
         let mut one = [0_u8; 1];
         assert_eq!(1, buf.read_and_copy_bytes(&mut one));
@@ -1616,7 +1502,8 @@ mod tests {
 
     #[test]
     fn test_try_read_exact() {
-        let mut buf = FixedBuf::filled("abc");
+        let mut buf: FixedBuf<8> = FixedBuf::new();
+        buf.write_str("abc").unwrap();
         let mut one = [0_u8; 1];
         buf.try_read_exact(&mut one).unwrap();
         assert_eq!(b"a", &one);
@@ -1632,7 +1519,7 @@ mod tests {
 
     #[test]
     fn test_try_read_exact_mut() {
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut buf: FixedBuf<16> = FixedBuf::new();
         buf.write_str("abc").unwrap();
         let mut one = [0_u8; 1];
         buf.try_read_exact(&mut one).unwrap();
@@ -1652,7 +1539,7 @@ mod tests {
 
     #[test]
     fn test_try_parse() {
-        #[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
+        #[derive(Debug, PartialEq)]
         enum CountError {
             BadValue,
             TooShort,
@@ -1665,7 +1552,9 @@ mod tests {
         }
         impl std::error::Error for CountError {}
 
-        fn count_as(buf: &mut FixedBuf<&[u8]>) -> Option<Result<usize, CountError>> {
+        fn count_as<const SIZE: usize>(
+            buf: &mut FixedBuf<SIZE>,
+        ) -> Option<Result<usize, CountError>> {
             let mut count: usize = 0;
             loop {
                 match buf.try_read_byte()? {
@@ -1681,32 +1570,43 @@ mod tests {
                 }
             }
         }
-
-        assert_eq!(None, FixedBuf::filled(b"").try_parse(count_as));
-        assert_eq!(None, FixedBuf::filled(b"a").try_parse(count_as));
-        assert_eq!(None, FixedBuf::filled(b"aa").try_parse(count_as));
-        assert_eq!(None, FixedBuf::filled(b"aaa").try_parse(count_as));
+        assert_eq!(None, FixedBuf::empty([0]).try_parse(count_as));
+        assert_eq!(None, FixedBuf::filled([b'a']).try_parse(count_as));
+        assert_eq!(None, FixedBuf::filled([b'a', b'a']).try_parse(count_as));
+        assert_eq!(
+            None,
+            FixedBuf::filled([b'a', b'a', b'a']).try_parse(count_as)
+        );
         assert_eq!(
             Some(Err(CountError::TooLong)),
-            FixedBuf::filled(b"aaaa").try_parse(count_as)
+            FixedBuf::filled([b'a', b'a', b'a', b'a']).try_parse(count_as)
         );
         assert_eq!(
             Some(Err(CountError::TooShort)),
-            FixedBuf::filled(b"b").try_parse(count_as)
+            FixedBuf::filled([b'b']).try_parse(count_as)
         );
-        assert_eq!(Some(Ok(1)), FixedBuf::filled(b"ab").try_parse(count_as));
-        assert_eq!(Some(Ok(2)), FixedBuf::filled(b"aab").try_parse(count_as));
-        assert_eq!(Some(Ok(3)), FixedBuf::filled(b"aaab").try_parse(count_as));
+        assert_eq!(
+            Some(Ok(1)),
+            FixedBuf::filled([b'a', b'b']).try_parse(count_as)
+        );
+        assert_eq!(
+            Some(Ok(2)),
+            FixedBuf::filled([b'a', b'a', b'b']).try_parse(count_as)
+        );
+        assert_eq!(
+            Some(Ok(3)),
+            FixedBuf::filled([b'a', b'a', b'a', b'b']).try_parse(count_as)
+        );
         assert_eq!(
             Some(Err(CountError::TooLong)),
-            FixedBuf::filled(b"aaaab").try_parse(count_as)
+            FixedBuf::filled([b'a', b'a', b'a', b'a', b'b']).try_parse(count_as)
         );
         assert_eq!(
             Some(Err(CountError::BadValue)),
-            FixedBuf::filled(b"ac").try_parse(count_as)
+            FixedBuf::filled([b'a', b'c']).try_parse(count_as)
         );
 
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut buf: FixedBuf<16> = FixedBuf::new();
         assert_eq!(None, buf.try_parse(count_as));
         buf.write_str("a").unwrap();
         assert_eq!(None, buf.try_parse(count_as));
@@ -1736,7 +1636,7 @@ mod tests {
 
     #[test]
     fn test_copy_once_from() {
-        let mut buf: FixedBuf<[u8; 4]> = FixedBuf::default();
+        let mut buf: FixedBuf<4> = FixedBuf::new();
 
         // Appends existing data.
         buf.write_str("a").unwrap();
@@ -1791,34 +1691,22 @@ mod tests {
     }
 
     #[test]
-    fn test_capacity() {
-        assert_eq!(0, FixedBuf::new([0u8; 0]).capacity());
-        assert_eq!(16, FixedBuf::new([0u8; 16]).capacity());
-        let buf: FixedBuf<Box<[u8]>> = FixedBuf::new(Box::new([0u8; 16]));
-        assert_eq!(16, buf.capacity());
-        let mut mem = [0u8; 16];
-        assert_eq!(16, FixedBuf::new(&mut mem).capacity());
-        assert_eq!(16, FixedBuf::filled([0u8; 16]).capacity());
-    }
-
-    #[test]
     fn test_escape_ascii() {
-        assert_eq!("", FixedBuf::filled(b"").escape_ascii());
-        assert_eq!("abc", FixedBuf::filled(b"abc").escape_ascii());
-        assert_eq!("\\r\\n", FixedBuf::filled(b"\r\n").escape_ascii());
-        assert_eq!(
-            "\\xe2\\x82\\xac",
-            FixedBuf::filled("€".as_bytes()).escape_ascii()
-        );
-        assert_eq!("\\x01", FixedBuf::filled(b"\x01").escape_ascii());
-        let buf = FixedBuf::filled(b"abc");
+        assert_eq!("", FixedBuf::filled([]).escape_ascii());
+        assert_eq!("abc", FixedBuf::filled([b'a', b'b', b'c']).escape_ascii());
+        assert_eq!("\\r\\n", FixedBuf::filled([b'\r', b'\n']).escape_ascii());
+        let mut buf: FixedBuf<4> = FixedBuf::new();
+        buf.write_str("€").unwrap();
+        assert_eq!("\\xe2\\x82\\xac", buf.escape_ascii());
+        assert_eq!("\\x01", FixedBuf::filled([1]).escape_ascii());
+        let buf = FixedBuf::filled([b'a', b'b', b'c']);
         assert_eq!("abc", buf.escape_ascii());
         assert_eq!(b"abc", buf.readable());
     }
 
     #[test]
     fn test_std_io_write() {
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut buf: FixedBuf<16> = FixedBuf::new();
         std::io::Write::write(&mut buf, b"abc").unwrap();
         assert_eq!("abc", buf.escape_ascii());
         std::io::Write::write(&mut buf, b"def").unwrap();
@@ -1836,7 +1724,7 @@ mod tests {
 
     #[test]
     fn test_std_io_read() {
-        let mut buf: FixedBuf<[u8; 16]> = FixedBuf::default();
+        let mut buf: FixedBuf<16> = FixedBuf::new();
         let mut data = ['.' as u8; 16];
         assert_eq!(0, std::io::Read::read(&mut buf, &mut data).unwrap());
         assert_eq!("..........", escape_ascii(&data[..10]));
@@ -1853,41 +1741,21 @@ mod tests {
 
     #[test]
     fn test_default() {
-        let _: FixedBuf<[u8; 8]> = FixedBuf::default();
-        let _: FixedBuf<[u8; 16]> = FixedBuf::default();
-        let mut array_buf: FixedBuf<[u8; 32]> = FixedBuf::default();
-        array_buf.write_str("abc").unwrap();
-        assert_eq!("abc", array_buf.escape_ascii());
-        // Default box buf has empty slice and cannot be read or written.
-        let mut box_buf: FixedBuf<Box<[u8]>> = FixedBuf::default();
-        assert_eq!("", box_buf.escape_ascii());
-        assert!(box_buf.writable().is_none());
-        // let slice_buf: FixedBuf<&mut [u8]> = FixedBuf::default(); // compiler error
+        let _: FixedBuf<8> = FixedBuf::default();
+        let _: FixedBuf<16> = FixedBuf::default();
+        let mut buf: FixedBuf<32> = FixedBuf::default();
+        buf.write_str("abc").unwrap();
+        assert_eq!("abc", buf.escape_ascii());
     }
 
     #[test]
     fn test_debug() {
-        let mut array_buf: FixedBuf<[u8; 8]> = FixedBuf::default();
-        let mut box_buf: FixedBuf<Box<[u8]>> = FixedBuf::new(Box::new([0; 16]));
-        let mut mem = [0u8; 15];
-        let mut slice_buf = FixedBuf::new(&mut mem);
-        array_buf.write_str("abc").unwrap();
-        box_buf.write_str("abc").unwrap();
-        slice_buf.write_str("abc").unwrap();
-        array_buf.read_bytes(1);
-        box_buf.read_bytes(1);
-        slice_buf.read_bytes(1);
+        let mut buf: FixedBuf<8> = FixedBuf::new();
+        buf.write_str("abc").unwrap();
+        buf.read_bytes(1);
         assert_eq!(
-            "FixedBuf{5 writable, 2 readable: \"bc\"}",
-            format!("{:?}", array_buf)
-        );
-        assert_eq!(
-            "FixedBuf{13 writable, 2 readable: \"bc\"}",
-            format!("{:?}", box_buf)
-        );
-        assert_eq!(
-            "FixedBuf{12 writable, 2 readable: \"bc\"}",
-            format!("{:?}", slice_buf)
+            "FixedBuf<8>{5 writable, 2 readable: \"bc\"}",
+            format!("{:?}", buf)
         );
     }
 }

@@ -48,8 +48,7 @@ fn handle_request<RW: Read + Write>(
 
 fn handle_conn(mut tcp_stream: TcpStream
 ) -> Result<(), Error> {
-    let mut buf: FixedBuf<[u8; 4096]> =
-        FixedBuf::new([0; 4096]);
+    let mut buf: FixedBuf<4096> = FixedBuf::new();
     loop {
         // Read a line
         // and leave leftover bytes in `buf`.
@@ -90,8 +89,7 @@ fn try_process_record(b: &[u8]) -> Result<usize, Error> {
 
 fn read_and_process<R: Read>(mut input: R)
     -> Result<(), Error> {
-    let mut buf: FixedBuf<[u8; 1024]> =
-        FixedBuf::new([0; 1024]);
+    let mut buf: FixedBuf<1024> = FixedBuf::new();
     loop {
         // Read a chunk into the buffer.
         if buf.copy_once_from(&mut input)? == 0 {
@@ -134,6 +132,11 @@ constructor is useful in tests.
 - [arrayvec](https://crates.io/crates/arrayvec), vector with fixed capacity.
 
 ## Changelog
+- v0.3.0 - Breaking API changes:
+  - Change type parameter to const buffer size. Example: `FixedBuf<1024>`.
+  - Remove `new` arg.
+  - Remove `capacity`.
+  - Remove `Copy` impl.
 - v0.2.3
   - Add
     [`read_byte`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.read_byte),
@@ -181,9 +184,6 @@ constructor is useful in tests.
 - Implement async-std read & write traits
 - Add an `frame_copy_iter` function.
   Because of borrowing rules, this function must return non-borrowed (allocated and copied) data.
-- Switch to const generics once they are stable:
-  - https://github.com/rust-lang/rust/issues/44580
-  - https://stackoverflow.com/a/56543462
 - Set up CI on:
   - DONE - Linux x86 64-bit
   - [macOS](https://gitlab.com/gitlab-org/gitlab/-/issues/269756)
@@ -192,6 +192,9 @@ constructor is useful in tests.
   - Linux ARM 64-bit (Raspberry Pi 3 and newer)
   - Linux ARM 32-bit (Raspberry Pi 2)
   - RISCV & ESP32 firmware?
+- DONE - Switch to const generics once they are stable:
+  - https://github.com/rust-lang/rust/issues/44580
+  - https://stackoverflow.com/a/56543462
 - DONE - Try to make this crate comply with the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/).
 - DONE - Find out how to include Readme.md info in the crate's docs.
 - DONE - Make the repo public

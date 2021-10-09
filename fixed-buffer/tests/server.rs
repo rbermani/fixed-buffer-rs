@@ -78,7 +78,7 @@ impl Request {
 
 fn handle_conn(mut tcp_stream: TcpStream) -> Result<(), std::io::Error> {
     println!("SERVER handling connection");
-    let mut buf: FixedBuf<[u8; 4096]> = FixedBuf::new([0; 4096]);
+    let mut buf: FixedBuf<4096> = FixedBuf::new();
     loop {
         let line_bytes = match buf.read_frame(&mut tcp_stream, fixed_buffer::deframe_line)? {
             Some(line_bytes) => line_bytes,

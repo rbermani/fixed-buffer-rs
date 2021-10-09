@@ -67,7 +67,7 @@ mod tests {
     #[test]
     fn both_empty() {
         let mut reader = std::io::Cursor::new(b"");
-        let mut read_writer = FixedBuf::new([0u8; 8]);
+        let mut read_writer: FixedBuf<8> = FixedBuf::new();
         let mut chain = ReadWriteChain::new(&mut reader, &mut read_writer);
         let mut buf = [b'.'; 8];
         assert_eq!(0, std::io::Read::read(&mut chain, &mut buf).unwrap());
@@ -100,7 +100,7 @@ mod tests {
     #[test]
     fn reads_second_when_first_empty() {
         let mut reader = std::io::Cursor::new(b"");
-        let mut read_writer = FixedBuf::new([0u8; 4]);
+        let mut read_writer: FixedBuf<4> = FixedBuf::new();
         read_writer.write_str("abc").unwrap();
         let mut chain = ReadWriteChain::new(&mut reader, &mut read_writer);
         let mut buf = [b'.'; 4];
@@ -111,7 +111,7 @@ mod tests {
     #[test]
     fn reads_first_then_second() {
         let mut reader = std::io::Cursor::new(b"ab");
-        let mut read_writer = FixedBuf::new([0u8; 4]);
+        let mut read_writer: FixedBuf<4> = FixedBuf::new();
         read_writer.write_str("cd").unwrap();
         let mut chain = ReadWriteChain::new(&mut reader, &mut read_writer);
         let mut buf = [b'.'; 4];
@@ -137,7 +137,7 @@ mod tests {
     #[test]
     fn passes_writes_through() {
         let mut reader = std::io::Cursor::new(b"");
-        let mut read_writer = FixedBuf::new([0u8; 4]);
+        let mut read_writer: FixedBuf<4> = FixedBuf::new();
         let mut chain = ReadWriteChain::new(&mut reader, &mut read_writer);
         assert_eq!(3, std::io::Write::write(&mut chain, b"abc").unwrap());
         assert_eq!("abc", read_writer.escape_ascii());
