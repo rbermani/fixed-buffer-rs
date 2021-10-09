@@ -12,14 +12,13 @@ This is the tokio async version of [`fixed-buffer`](https://crates.io/crates/fix
 
 ## Features
 - Write bytes to the buffer and read them back
-- Does not allocate memory
 - Use it to read a stream, search for a delimiter,
   and save leftover bytes for the next read.
+- Does not allocate memory
 - Depends only on
   [`std`](https://doc.rust-lang.org/stable/std/),
   [`tokio`](https://crates.io/crates/tokio), and
   [`fixed-buffer`](https://crates.io/crates/fixed-buffer).
-- Works with Tokio 1 and Rust `latest`, `beta`, and `nightly`
 - No macros
 - Good test coverage (98%)
 - `forbid(unsafe_code)`
