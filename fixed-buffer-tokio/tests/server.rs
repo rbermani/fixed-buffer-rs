@@ -146,7 +146,7 @@ pub async fn main() {
     println!("CLIENT sending two requests at the same time: CRC('aaaa') and HELLO");
     tcp_stream.write_all(b"CRC32 4\naaaaHELLO\n").await.unwrap();
     let mut response = String::new();
-    tcp_stream.shutdown(Shutdown::Write).unwrap();
+    tcp_stream.shutdown().await.unwrap();
     tcp_stream.read_to_string(&mut response).await.unwrap();
     for line in response.lines() {
         println!("CLIENT got response {:?}", line);
