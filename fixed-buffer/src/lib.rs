@@ -146,6 +146,7 @@
 //!   - Remove `new` arg.
 //!   - Remove `capacity`.
 //!   - Remove `Copy` impl.
+//!   - Change `writable` return type to `&mut [u8]`.
 //! - v0.2.3
 //!   - Add
 //!     [`read_byte`](https://docs.rs/fixed-buffer/latest/fixed_buffer/struct.FixedBuf.html#method.read_byte),
@@ -520,13 +521,13 @@ impl<const SIZE: usize> FixedBuf<SIZE> {
     /// ```
     /// # use fixed_buffer::FixedBuf;
     /// #[derive(Debug)]
-    /// enum ParseError {
+    /// enum ReadError {
     ///     BufferFull,
     ///     EOF,
     ///     TooLong,
     ///     NotUtf8,
     /// }
-    /// # fn main() -> Result<(), ParseError> {
+    /// # fn main() -> Result<(), ReadError> {
     /// # let mut input: Vec<&[u8]> = vec![
     /// #     &[0_u8, 1, b'a', 3, b'a'][..],
     /// #     &[b'b', b'c',
@@ -537,44 +538,40 @@ impl<const SIZE: usize> FixedBuf<SIZE> {
     /// # ];
     /// # let mut read_input = |buf: &mut FixedBuf<16>| {
     /// #     if input.is_empty() {
-    /// #         return Err(ParseError::EOF);
+    /// #         return Err(ReadError::EOF);
     /// #     }
     /// #     buf.shift();
-    /// #     if let Some(writable) = buf.writable() {
-    /// #         let chunk = input.remove(0);
-    /// #         if chunk.len() > writable.len() {
-    /// #             return Err(ParseError::BufferFull);
-    /// #         }
-    /// #         let dest = &mut writable[..chunk.len()];
-    /// #         dest.copy_from_slice(&chunk);
-    /// #         buf.wrote(chunk.len());
-    /// #         Ok(())
-    /// #     } else {
-    /// #         Err(ParseError::BufferFull)
+    /// #     let writable = buf.writable();
+    /// #     let chunk = input.remove(0);
+    /// #     if chunk.len() > writable.len() {
+    /// #         return Err(ReadError::BufferFull);
     /// #     }
+    /// #     let dest = &mut writable[..chunk.len()];
+    /// #     dest.copy_from_slice(&chunk);
+    /// #     buf.wrote(chunk.len());
+    /// #     Ok(())
     /// # };
     /// # let mut output: Vec<String> = Vec::new();
     /// # let mut process_record = |record| { output.push(record); Ok(()) };
     ///
     /// fn parse_record<const SIZE: usize>(buf: &mut FixedBuf<SIZE>)
-    /// -> Option<Result<String, ParseError>>
+    /// -> Option<Result<String, ReadError>>
     /// {
     ///     let len = buf.try_read_byte()? as usize;
     ///     if len > SIZE - 1 {
-    ///         return Some(Err(ParseError::TooLong));
+    ///         return Some(Err(ReadError::TooLong));
     ///     }
     ///     let bytes = buf.try_read_bytes(len)?.to_vec();
     ///     Some(String::from_utf8(bytes)
-    ///         .map_err(|_| ParseError::NotUtf8))
+    ///         .map_err(|_| ReadError::NotUtf8))
     /// }
     ///
     /// let mut buf: FixedBuf<16> = FixedBuf::new();
     /// loop {
     ///     // Try reading bytes into the buffer.
-    ///     // TODO: Clarify this example.
     ///     match read_input(&mut buf) {
-    ///         Err(ParseError::EOF) if buf.is_empty() => break,
-    ///         result => result?,
+    ///         Err(ReadError::EOF) if buf.is_empty() => break,
+    ///         other => other?,
     ///     }
     ///     // Try parsing bytes into records.
     ///     loop {
@@ -615,9 +612,13 @@ impl<const SIZE: usize> FixedBuf<SIZE> {
         &mut self,
         reader: &mut R,
     ) -> Result<usize, std::io::Error> {
-        let mut writable = self.writable().ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, "no empty space in buffer")
-        })?;
+        let mut writable = self.writable();
+        if writable.is_empty() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "no empty space in buffer",
+            ));
+        };
         let num_read = reader.read(&mut writable)?;
         self.wrote(num_read);
         Ok(num_read)
@@ -664,7 +665,7 @@ impl<const SIZE: usize> FixedBuf<SIZE> {
     /// buf.write_bytes("9".as_bytes()).unwrap_err();  // Error, buffer is full.
     /// ```
     pub fn write_bytes(&mut self, data: &[u8]) -> core::result::Result<usize, NotEnoughSpaceError> {
-        let writable = self.writable().ok_or(NotEnoughSpaceError {})?;
+        let writable = self.writable();
         if writable.len() < data.len() {
             return Err(NotEnoughSpaceError {});
         }
@@ -680,7 +681,7 @@ impl<const SIZE: usize> FixedBuf<SIZE> {
     /// Then call [`wrote(usize)`](#method.wrote)
     /// to commit those bytes into the buffer and make them available for reading.
     ///
-    /// Returns `None` when the end of the buffer is full.
+    /// Returns an empty slice when the end of the buffer is full.
     ///
     /// See [`shift`](#method.shift).
     ///
@@ -696,19 +697,14 @@ impl<const SIZE: usize> FixedBuf<SIZE> {
     /// ```
     /// # use fixed_buffer::{escape_ascii, FixedBuf};
     /// let mut buf: FixedBuf<8> = FixedBuf::new();
-    /// let writable = buf.writable().unwrap();
-    /// writable[0] = 'a' as u8;
-    /// writable[1] = 'b' as u8;
-    /// writable[2] = 'c' as u8;
+    /// buf.writable()[0] = 'a' as u8;
+    /// buf.writable()[1] = 'b' as u8;
+    /// buf.writable()[2] = 'c' as u8;
     /// buf.wrote(3);
     /// assert_eq!("abc", buf.escape_ascii());
     /// ```
-    pub fn writable(&mut self) -> Option<&mut [u8]> {
-        if self.write_index >= self.mem.as_mut().len() {
-            // Ran out of space.
-            return None;
-        }
-        Some(&mut self.mem.as_mut()[self.write_index..])
+    pub fn writable(&mut self) -> &mut [u8] {
+        &mut self.mem.as_mut()[self.write_index..]
     }
 
     /// Commits bytes into the buffer.
@@ -900,9 +896,13 @@ impl<const SIZE: usize> FixedBuf<SIZE> {
                 // None case falls through.
             }
             self.shift();
-            let writable = self.writable().ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidData, "end of buffer full")
-            })?;
+            let writable = self.writable();
+            if writable.is_empty() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "end of buffer full",
+                ));
+            };
             let num_read = reader.read(writable)?;
             if num_read == 0 {
                 if self.is_empty() {
@@ -1077,16 +1077,16 @@ mod tests {
     #[test]
     fn test_writable_and_wrote() {
         let mut buf: FixedBuf<16> = FixedBuf::new();
-        assert_eq!(16, buf.writable().unwrap().len());
-        buf.writable().unwrap()[0] = 'a' as u8;
+        assert_eq!(16, buf.writable().len());
+        buf.writable()[0] = 'a' as u8;
         buf.wrote(1);
         assert_eq!("a", buf.escape_ascii());
         let many_bs = "b".repeat(15);
-        assert_eq!(many_bs.len(), buf.writable().unwrap().len());
-        buf.writable().unwrap().copy_from_slice(many_bs.as_bytes());
+        assert_eq!(many_bs.len(), buf.writable().len());
+        buf.writable().copy_from_slice(many_bs.as_bytes());
         buf.wrote(many_bs.len());
         assert_eq!("a".to_string() + &many_bs, buf.escape_ascii());
-        assert_eq!(None, buf.writable());
+        assert!(buf.writable().is_empty());
     }
 
     #[test]
