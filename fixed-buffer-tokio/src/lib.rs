@@ -10,18 +10,17 @@
 //!
 //! # Features
 //! - Write bytes to the buffer and read them back
-//! - Lives on the stack
 //! - Does not allocate memory
 //! - Use it to read a stream, search for a delimiter,
 //!   and save leftover bytes for the next read.
-//! - Easy to learn & use.  Easy to maintain code that uses it.
 //! - Depends only on
 //!   [`std`](https://doc.rust-lang.org/stable/std/),
-//!   [`tokio 0.3`](https://crates.io/crates/tokio), and
+//!   [`tokio`](https://crates.io/crates/tokio), and
 //!   [`fixed-buffer`](https://crates.io/crates/fixed-buffer).
-//! - Works with Tokio 0.3 and Rust `latest`, `beta`, and `nightly`
+//! - Works with Tokio 1 and Rust `latest`, `beta`, and `nightly`
 //! - No macros
 //! - Good test coverage (98%)
+//! - `forbid(unsafe_code)`
 //!
 //! # Documentation
 //! https://docs.rs/fixed-buffer-tokio
@@ -35,6 +34,7 @@
 //! - [tokio::io::BufWriter](https://docs.rs/tokio/latest/tokio/io/struct.BufWriter.html)
 //!
 //! # Changelog
+//! - v0.3.2 - Update docs
 //! - v0.3.1 - Support Tokio 1
 //! - v0.3.0 - Breaking API changes:
 //!   - Change type parameter to const buffer size. Example: `FixedBuf<1024>`.
