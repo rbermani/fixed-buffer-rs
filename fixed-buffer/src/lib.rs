@@ -251,12 +251,25 @@ pub use test_utils::*;
 
 #[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NotEnoughSpaceError {}
+impl From<NotEnoughSpaceError> for std::io::Error {
+    fn from(_: NotEnoughSpaceError) -> Self {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "not enough space in buffer",
+        )
+    }
+}
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct MalformedInputError(String);
 impl MalformedInputError {
     pub fn new(msg: String) -> Self {
         Self(msg)
+    }
+}
+impl From<MalformedInputError> for std::io::Error {
+    fn from(e: MalformedInputError) -> Self {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{:?}", e))
     }
 }
 
@@ -768,18 +781,14 @@ impl<const SIZE: usize> FixedBuf<SIZE> {
         if self.is_empty() {
             return Ok(None);
         }
-        match deframer_fn(self.readable()) {
-            Err(e) => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("{:?}", e),
-            )),
-            Ok(Some((data_range, block_len))) => {
+        match deframer_fn(self.readable())? {
+            Some((data_range, block_len)) => {
                 let mem_start = self.read_index + data_range.start;
                 let mem_end = self.read_index + data_range.end;
                 self.read_bytes(block_len);
                 Ok(Some(mem_start..mem_end))
             }
-            Ok(None) => Ok(None),
+            None => Ok(None),
         }
     }
 
@@ -911,12 +920,7 @@ impl<const SIZE: usize> FixedBuf<SIZE> {
 
 impl<const SIZE: usize> std::io::Write for FixedBuf<SIZE> {
     fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
-        self.write_bytes(data).map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "not enough space in buffer",
-            )
-        })
+        Ok(self.write_bytes(data)?)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
