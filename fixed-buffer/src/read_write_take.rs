@@ -31,8 +31,8 @@ impl<'a, RW: std::io::Read + std::io::Write> std::io::Read for ReadWriteTake<'a,
             return Ok(0);
         }
         let num_to_read = self.remaining_bytes.min(buf.len() as u64) as usize;
-        let mut dest = &mut buf[0..num_to_read];
-        match self.read_writer.read(&mut dest) {
+        let dest = &mut buf[0..num_to_read];
+        match self.read_writer.read(dest) {
             Ok(num_read) => {
                 self.remaining_bytes -= num_read as u64;
                 Ok(num_read)

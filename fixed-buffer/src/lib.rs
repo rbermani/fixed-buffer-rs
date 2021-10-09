@@ -438,9 +438,7 @@ impl<const SIZE: usize> FixedBuf<SIZE> {
     /// Panics if the buffer does not contain enough bytes.
     pub fn read_bytes(&mut self, num_bytes: usize) -> &[u8] {
         let new_read_index = self.read_index + num_bytes;
-        if new_read_index > self.write_index {
-            panic!("read would underflow");
-        }
+        assert!(new_read_index <= self.write_index, "read would underflow");
         let old_read_index = self.read_index;
         // We update `read_index` after any possible panic.
         // This keeps the struct consistent even when a panic happens.
@@ -612,14 +610,14 @@ impl<const SIZE: usize> FixedBuf<SIZE> {
         &mut self,
         reader: &mut R,
     ) -> Result<usize, std::io::Error> {
-        let mut writable = self.writable();
+        let writable = self.writable();
         if writable.is_empty() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "no empty space in buffer",
             ));
         };
-        let num_read = reader.read(&mut writable)?;
+        let num_read = reader.read(writable)?;
         self.wrote(num_read);
         Ok(num_read)
     }
@@ -721,9 +719,10 @@ impl<const SIZE: usize> FixedBuf<SIZE> {
             return;
         }
         let new_write_index = self.write_index + num_bytes;
-        if new_write_index > self.mem.as_mut().len() {
-            panic!("write would overflow");
-        }
+        assert!(
+            new_write_index <= self.mem.as_mut().len(),
+            "write would overflow"
+        );
         self.write_index = new_write_index;
     }
 
