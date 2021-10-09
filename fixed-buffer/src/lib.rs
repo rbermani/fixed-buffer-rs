@@ -930,7 +930,7 @@ impl<const SIZE: usize> std::io::Read for FixedBuf<SIZE> {
     }
 }
 
-impl<T: AsRef<[u8]>> core::fmt::Debug for FixedBuf<T> {
+impl<const SIZE: usize> core::fmt::Debug for FixedBuf<SIZE> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::result::Result<(), core::fmt::Error> {
         write!(
             f,
