@@ -239,6 +239,9 @@ pub use deframe_crlf::deframe_crlf;
 mod deframe_line;
 pub use deframe_line::deframe_line;
 
+mod deframe_null;
+pub use deframe_null::deframe_null;
+
 mod read_write_chain;
 pub use read_write_chain::*;
 
